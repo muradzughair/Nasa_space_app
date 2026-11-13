@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { AtlasData, Site } from "../analog/data";
 import { type Grid, siteMeasures } from "../analog/grid";
+import { cellSummary } from "../analog/heatmap";
 import { evaluate, profileById, similarity } from "../analog/scoring";
 import { formatLat, formatLon } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
@@ -8,7 +9,9 @@ import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
 import { Comparison, SourceList, where } from "./Comparison";
 import { BackIcon, CloseIcon } from "./icons";
+import { useCellScores } from "./HeatmapControls";
 import { BodyScores, featureNote, sourcesOf, useGrid } from "./InfoCard";
+import { HeatmapCellNote, RequestVerification } from "./verify/RequestAction";
 import { flyToProfile } from "./TargetBar";
 
 interface Props {
@@ -57,6 +60,11 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
     [data, grid, site, profile, evaluation],
   );
   const onTarget = planet !== "earth";
+  const heatmapOn = useStore((s) => s.heatmap.on);
+  const { cells } = useCellScores(grid, profile, heatmapOn);
+  const summary = useMemo(() => cellSummary(grid, profile, cells, site.lat, site.lon), [grid, profile, cells, site]);
+  const siteDatasets = [...new Set(Object.values(site.m).map((m) => m.src))].filter((id) => data.sources[id]?.kind === "dataset");
+  const gridDatasets = Object.entries(grid.header.sources).filter(([, x]) => /POWER|GLiM|Impact|Volcanism/.test(x.label));
   const found = featureNote(features);
 
   const sourceIds = new Set<string>(site.refs);
@@ -69,6 +77,25 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
       <p className="cell-scale">
         Ranked {place} of {data.sites.length} reference sites for {where(profile)}, {profile.name.toLowerCase()}.
       </p>
+
+      {heatmapOn && summary && <HeatmapCellNote summary={summary} profile={profile} here={{ label: "This reference site", score: evaluation.overall }} kind="site" />}
+      <RequestVerification
+        input={{
+          site: { name: site.name, lat: site.lat, lon: site.lon, kind: "curated-site", siteId: site.id, country: site.country },
+          profile,
+          evaluation,
+          basis: "curated-site",
+          heatmapCell: summary,
+          datasets: [
+            ...siteDatasets.map((id) => ({ id, source: data.sources[id], fromSite: true })),
+            ...gridDatasets.filter(([id]) => !siteDatasets.includes(id)).map(([id, source]) => ({ id, source })),
+          ],
+          sources: [...site.refs.filter((id) => data.sources[id]).map((id) => data.sources[id]), ...sourcesOf(data, profile)],
+          gridGenerated: grid.header.generated,
+          cellDegrees: grid.header.cellDegrees,
+          modelledTemperature: false,
+        }}
+      />
 
       <Comparison data={data} profile={profile} evaluation={evaluation} label={site.name.split(",")[0]} pressure={measures.pressure} />
 

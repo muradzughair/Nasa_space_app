@@ -5,6 +5,7 @@ import { type Body, type Profile, profileById, PROFILES, profilesOf, similarity 
 import type { GlobeController } from "../globe/GlobeController";
 import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
+import { HeatmapControls } from "./HeatmapControls";
 import { ChevronIcon } from "./icons";
 import { useGrid } from "./InfoCard";
 
@@ -16,7 +17,8 @@ export const flyToProfile = (globe: GlobeController | null, p: Profile) =>
 /**
  * The compact control on the left: which body and which version of it Earth
  * is compared with and, folded away until asked for, the ranked list of
- * reference sites. Nothing on the globe is scored from here: a spot is scored
+ * reference sites, and the switch for the similarity heatmap. Until that
+ * switch is on, nothing on the globe is scored from here: a spot is scored
  * from its own card, when its button is pressed. It stays
  * narrow so the whole-planet view is never covered; reading happens in the
  * card on the right.
@@ -25,6 +27,7 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
   const { data, failed } = useAtlas();
   const atlas = useStore((s) => s.atlas);
   const onEarth = useStore((s) => s.planet) === "earth";
+  const heatmapOn = useStore((s) => s.heatmap.on);
   const [newOnly, setNewOnly] = useState(false);
   const listId = useId();
   const profile = profileById(atlas.profiles[atlas.body]);
@@ -92,7 +95,13 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
         </button>
       </div>
 
-      {onEarth && <p className="targetbar-hint">Click any spot on Earth, then press Score this spot.</p>}
+      <HeatmapControls profile={profile} />
+
+      {onEarth && (
+        <p className="targetbar-hint">
+          {heatmapOn ? "Click a cell for its breakdown and to request local verification." : "Click any spot on Earth, then press Score this spot."}
+        </p>
+      )}
 
       <button
         type="button"

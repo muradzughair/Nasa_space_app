@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { type AtlasData, percent, type Site, type Source, useAtlas } from "../analog/data";
 import { cellAt, type Features, type Grid, loadGrid, nearbySite } from "../analog/grid";
+import { cellSummary } from "../analog/heatmap";
 import { type Body, type EarthMeasures, evaluate, type Profile, profileById, profilesOf, similarity } from "../analog/scoring";
 import { formatDistance, formatLat, formatLon, formatPopulation } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
 import { type AtlasState, type Selection, type SelectionKind, updateAtlas, useStore } from "../state/store";
 import { AnalogCard } from "./AnalogCard";
 import { Comparison, SourceList } from "./Comparison";
+import { useCellScores } from "./HeatmapControls";
 import { CloseIcon } from "./icons";
 import { flyToProfile } from "./TargetBar";
+import { HeatmapCellNote, RequestVerification } from "./verify/RequestAction";
 
 const KIND_LABEL: Record<SelectionKind, string> = {
   country: "Country",
@@ -39,7 +42,8 @@ export function useGrid(wanted: boolean): { grid: Grid | null; failed: boolean }
 /**
  * The reading surface, on the right: a curated site's full card when one is
  * open, otherwise the place that was clicked. On Earth the card offers a
- * button; pressing it scores that one place against Mars and the Moon.
+ * button; pressing it scores that one place against Mars and the Moon. While
+ * the heatmap is on, the breakdown opens without the button.
  */
 export function InfoCard({ globe }: { globe: GlobeController | null }) {
   const selection = useStore((s) => s.selection);
@@ -49,7 +53,9 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
   const onEarth = planet === "earth";
   // Nothing is scored until the button is pressed, and only the selected spot.
   const [scoredId, setScoredId] = useState<number | null>(null);
-  const scored = !!selection && scoredId === selection.id;
+  // With the heatmap on, every cell has been scored already, so a click opens the breakdown directly.
+  const heatmapOn = useStore((s) => s.heatmap.on);
+  const scored = !!selection && (scoredId === selection.id || heatmapOn);
   const { grid, failed } = useGrid(onEarth && scored);
 
   const site = data?.sites.find((s) => s.id === atlas.siteId) ?? null;
@@ -180,6 +186,23 @@ function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
   const profile = profileById(atlas.profiles[atlas.body]);
   const evaluation = useMemo(() => (cell ? evaluate(cell.measures, profile) : null), [cell, profile]);
   const near = useMemo(() => nearbySite(data, selection.lat, selection.lon), [data, selection.lat, selection.lon]);
+  const heatmapOn = useStore((s) => s.heatmap.on);
+  const { cells } = useCellScores(grid, profile, heatmapOn);
+  const summary = useMemo(() => cellSummary(grid, profile, cells, selection.lat, selection.lon), [grid, profile, cells, selection.lat, selection.lon]);
+
+  // Outline the grid cell on the globe, so it is plain that the numbers are for a region, not a point.
+  useEffect(() => {
+    if (!globe || !summary || !heatmapOn) return;
+    const half = summary.cellDegrees / 2;
+    globe.setVerifyOverlay({ cell: { south: summary.centreLat - half, north: summary.centreLat + half, west: summary.centreLon - half, east: summary.centreLon + half } });
+    return () => {
+      try {
+        globe.setVerifyOverlay({});
+      } catch {
+        /* globe destroyed */
+      }
+    };
+  }, [globe, heatmapOn, summary?.centreLat, summary?.centreLon, summary?.cellDegrees]);
 
   if (!cell || !evaluation) {
     return (
@@ -197,6 +220,22 @@ function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
   return (
     <>
       <BodyScores measures={cell.measures} atlas={atlas} />
+
+      {heatmapOn && summary && <HeatmapCellNote summary={summary} profile={profile} here={{ label: "This point", score: evaluation.overall }} kind="point" />}
+      <RequestVerification
+        input={{
+          site: { name: selection.title, lat: selection.lat, lon: selection.lon, kind: "grid-point", country: selection.subtitle || undefined },
+          profile,
+          evaluation,
+          basis: "grid-point",
+          heatmapCell: summary,
+          datasets: cell.sources.filter((id) => header.sources[id]).map((id) => ({ id, source: header.sources[id] })),
+          sources: sourcesOf(data, profile),
+          gridGenerated: header.generated,
+          cellDegrees: header.cellDegrees,
+          modelledTemperature: cell.modelledTemperature,
+        }}
+      />
 
       <Comparison data={data} profile={profile} evaluation={evaluation} label="This spot" pressure={cell.measures.pressure} />
 

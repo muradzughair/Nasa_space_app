@@ -60,12 +60,30 @@ export interface AtlasState {
   listOpen: boolean;
 }
 
+/** The similarity heatmap on Earth. The scores are not kept here (see analog/heatmap.ts). */
+export interface HeatmapState {
+  on: boolean;
+  /** Layer opacity, 0 to 1. */
+  opacity: number;
+  /** Cells scoring below this are drawn as a neutral wash. Display only: scores do not change. */
+  threshold: number;
+}
+
+/** Which screen of the verification workspace is open. Its records live in IndexedDB (verify/db.ts). */
+export interface VerifyState {
+  open: boolean;
+  view: "list" | "new" | "request" | "respond" | "review";
+  requestId: string | null;
+}
+
 export interface AppState {
   ready: boolean;
   planet: PlanetId;
   arrival: Arrival | null;
   overlay: OverlayId | null;
   atlas: AtlasState;
+  heatmap: HeatmapState;
+  verify: VerifyState;
   settings: Settings;
   /** Imagery actually on screen (differs from the setting after a fallback). */
   activeImagery: ImageryId | null;
@@ -117,6 +135,8 @@ export const store = createStore({
   arrival: null,
   overlay: null,
   atlas: { open: true, body: "mars", profiles: { mars: "mars-modern", moon: "moon-maria" }, siteId: null, listOpen: false },
+  heatmap: { on: false, opacity: 0.8, threshold: 0 },
+  verify: { open: false, view: "list", requestId: null },
   settings: loadSettings({
     imagery: "esri",
     moonImagery: "moon-wac",
@@ -164,3 +184,11 @@ export function updateAtlas(patch: Partial<AtlasState>) {
 /** Which setting holds the imagery choice for a world. */
 export const imageryKey = (planet: PlanetId) =>
   planet === "moon" ? "moonImagery" : planet === "mars" ? "marsImagery" : "imagery";
+
+export function updateHeatmap(patch: Partial<HeatmapState>) {
+  store.set({ heatmap: { ...store.get().heatmap, ...patch } });
+}
+
+export function updateVerify(patch: Partial<VerifyState>) {
+  store.set({ verify: { ...store.get().verify, ...patch } });
+}

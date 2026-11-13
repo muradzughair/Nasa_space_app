@@ -20,6 +20,7 @@ import {
   Ellipsoid,
   EllipsoidalOccluder,
   type Entity,
+  HeightReference,
   ImageryLayer,
   Ion,
   JulianDate,
@@ -31,6 +32,7 @@ import {
   SceneTransforms,
   SingleTileImageryProvider,
   TextureMagnificationFilter,
+  TextureMinificationFilter,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   WebMercatorTilingScheme,
@@ -43,6 +45,7 @@ import { type ImageryId, imageryKey, type OverlayId, type Selection, type Select
 import { createImagery, createLabelsProvider, createNightLightsProvider, createOverlayProvider, createPolarCapProvider } from "./imagery";
 import { type PlanetId, type PlanetInfo, PLANETS } from "./planets";
 import { createTerrain, flatTerrain } from "./terrain";
+import { runWalkthrough, type Walkthrough, type WalkthroughOptions } from "./walkthrough";
 
 const EARTH_RADIUS = 6_378_137;
 const TOP_DOWN = { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 };
@@ -51,6 +54,13 @@ const TOP_DOWN = { heading: 0, pitch: -CesiumMath.PI_OVER_TWO, roll: 0 };
 const MAX_CAMERA_HEIGHT = 6e7;
 /** Stands in for the Natural Earth lookup on worlds that have no countries or seas. */
 const NO_HIT: LocalHit = { kind: "none", name: "", detail: "", span: 0 };
+
+export interface VerifyOverlay {
+  /** Bounds of a grid cell, in degrees. */
+  cell?: { south: number; north: number; west: number; east: number };
+  route?: { lat: number; lon: number }[];
+  points?: { lat: number; lon: number; kind: "site" | "waypoint" | "pick" }[];
+}
 
 export interface Pin {
   lat: number;
@@ -133,7 +143,9 @@ export class GlobeController {
   private labelLayer: ImageryLayer | null = null;
   private overlayLayer: ImageryLayer | null = null;
   private heatmapLayer: ImageryLayer | null = null;
-  private heatmapRequest = 0;
+  private clickHandler: ((lat: number, lon: number) => void) | null = null;
+  private verifyEntities: Entity[] = [];
+  private walkthrough: Walkthrough | null = null;
   private pins: Entity[] = [];
   private imageryRequest = 0;
   private terrainRequest = 0;
@@ -487,21 +499,114 @@ export class GlobeController {
    * top) over the globe: the similarity heatmap. One texture, so it costs a
    * single extra imagery layer however the camera moves. Null removes it.
    */
-  async setHeatmap(image: HTMLCanvasElement | null): Promise<void> {
-    const request = ++this.heatmapRequest;
+  setHeatmap(image: HTMLCanvasElement | null, alpha = 0.8): void {
     const { imageryLayers } = this.viewer;
     const previous = this.heatmapLayer;
     let next: ImageryLayer | null = null;
     if (image && this.planet.earthServices) {
-      const provider = new CanvasImageryProvider(image);
-      if (this.destroyed || request !== this.heatmapRequest) return;
-      // Nearest-neighbour when zoomed in: the cells are about 50 km and should look it.
-      next = new ImageryLayer(provider, { alpha: 0.78, magnificationFilter: TextureMagnificationFilter.NEAREST });
+      // Nearest-neighbour both ways: one pixel is one grid cell and must look like one, with no blending into the sea.
+      next = new ImageryLayer(new CanvasImageryProvider(image), {
+        alpha,
+        magnificationFilter: TextureMagnificationFilter.NEAREST,
+        minificationFilter: TextureMinificationFilter.NEAREST,
+      });
       imageryLayers.add(next, this.labelLayer ? imageryLayers.indexOf(this.labelLayer) : imageryLayers.length);
     }
     if (previous) imageryLayers.remove(previous, true);
     this.heatmapLayer = next;
     this.viewer.scene.requestRender();
+  }
+
+  setHeatmapOpacity(alpha: number): void {
+    if (this.heatmapLayer) this.heatmapLayer.alpha = alpha;
+    this.viewer.scene.requestRender();
+  }
+
+  /**
+   * Sends the next clicks on the globe to `handler` instead of selecting a
+   * place: used to pick a map point or a route waypoint. Null restores
+   * ordinary selection.
+   */
+  setClickHandler(handler: ((lat: number, lon: number) => void) | null): void {
+    this.clickHandler = handler;
+    this.viewer.scene.canvas.style.cursor = handler ? "crosshair" : "";
+  }
+
+  /**
+   * Lines and dots drawn for the verification workflow: the outline of a
+   * grid cell, a route, and marked points. Replaces whatever was drawn
+   * before; an empty object clears it.
+   */
+  setVerifyOverlay(overlay: VerifyOverlay): void {
+    const { entities } = this.viewer;
+    for (const entity of this.verifyEntities) entities.remove(entity);
+    this.verifyEntities = [];
+    const line = (points: { lat: number; lon: number }[], color: string, width: number) => {
+      if (points.length < 2) return;
+      this.verifyEntities.push(
+        entities.add({
+          polyline: {
+            positions: Cartesian3.fromDegreesArray(points.flatMap((p) => [p.lon, p.lat])),
+            clampToGround: true,
+            width,
+            material: Color.fromCssColorString(color),
+          },
+        }),
+      );
+    };
+    if (overlay.cell) {
+      const { south, north, west, east } = overlay.cell;
+      line(
+        [
+          { lat: south, lon: west },
+          { lat: south, lon: east },
+          { lat: north, lon: east },
+          { lat: north, lon: west },
+          { lat: south, lon: west },
+        ],
+        "rgba(255,255,255,0.85)",
+        1.5,
+      );
+    }
+    if (overlay.route) line(overlay.route, "#5fe3ff", 3);
+    for (const point of overlay.points ?? []) {
+      this.verifyEntities.push(
+        entities.add({
+          position: Cartesian3.fromDegrees(point.lon, point.lat),
+          point: {
+            pixelSize: point.kind === "site" ? 11 : 8,
+            color: Color.fromCssColorString(point.kind === "site" ? "#ffd166" : point.kind === "pick" ? "#ff7ab6" : "#5fe3ff"),
+            outlineColor: Color.BLACK.withAlpha(0.8),
+            outlineWidth: 2,
+            heightReference: HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }),
+      );
+    }
+    this.viewer.scene.requestRender();
+  }
+
+  /**
+   * Moves the camera along a route close to the ground, optionally recording
+   * the canvas. A terrain preview of satellite imagery on an elevation model:
+   * not a rover simulation. One at a time; starting another stops the first.
+   */
+  playWalkthrough(route: { lat: number; lon: number }[], options: WalkthroughOptions): Walkthrough {
+    this.walkthrough?.stop();
+    this.onUserInput();
+    // The preview shows the place as imaged. Model colours (the heatmap) and science overlays stay out of it.
+    const hidden = [this.heatmapLayer, this.overlayLayer].filter((layer): layer is ImageryLayer => !!layer && layer.show);
+    for (const layer of hidden) layer.show = false;
+    const run = runWalkthrough(this.viewer, route, options);
+    this.walkthrough = run;
+    void run.finished.then(() => {
+      if (this.destroyed) return;
+      for (const layer of hidden) if (!layer.isDestroyed()) layer.show = true;
+      if (this.walkthrough === run) this.walkthrough = null;
+      this.viewer.scene.requestRender();
+    });
+    return run;
   }
 
   /** Small dots for the analog sites (on Earth) or the targets (on the Moon and Mars). */
@@ -663,6 +768,10 @@ export class GlobeController {
     if (!hit) return; // clicked on space
     const point = Cartographic.fromCartesian(hit);
     const lat = CesiumMath.toDegrees(point.latitude);
+    if (this.clickHandler) {
+      this.clickHandler(lat, CesiumMath.toDegrees(point.longitude));
+      return;
+    }
     // A click on the ground replaces a curated site's card with the comparison for that point.
     if (store.get().atlas.siteId) updateAtlas({ siteId: null });
     this.select(lat, CesiumMath.toDegrees(point.longitude), {
@@ -1029,6 +1138,7 @@ export class GlobeController {
     if (this.destroyed) return;
     this.destroyed = true;
     this.reverseAbort?.abort();
+    this.walkthrough?.stop();
     this.cleanup.forEach((fn) => fn());
     this.hudListeners.clear();
     this.handler.destroy();

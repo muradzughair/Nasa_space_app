@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Controls } from "./components/Controls";
+import { HeatmapLayer } from "./components/HeatmapControls";
 import { Hud } from "./components/Hud";
-import { AtlasIcon } from "./components/icons";
+import { AtlasIcon, VerifyIcon } from "./components/icons";
 import { InfoCard } from "./components/InfoCard";
 import { PlanetSwitcher } from "./components/PlanetSwitcher";
 import { SearchBox } from "./components/SearchBox";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TargetBar } from "./components/TargetBar";
+import { VerifyPanel } from "./components/verify/VerifyPanel";
 import type { GlobeController } from "./globe/GlobeController";
 import { PLANETS } from "./globe/planets";
-import { store, updateAtlas, useStore } from "./state/store";
+import { store, updateAtlas, updateVerify, useStore } from "./state/store";
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,6 +24,7 @@ export function App() {
   const toast = useStore((s) => s.toast);
   const planet = useStore((s) => s.planet);
   const atlasOpen = useStore((s) => s.atlas.open);
+  const verifyOpen = useStore((s) => s.verify.open);
 
   // One globe per world: switching planets tears the viewer down and builds
   // a new one on that world's ellipsoid.
@@ -78,12 +81,23 @@ export function App() {
           >
             <AtlasIcon />
           </button>
+          <button
+            type="button"
+            className={`icon-button panel${verifyOpen ? " is-active" : ""}`}
+            onClick={() => updateVerify({ open: !verifyOpen })}
+            aria-label="Site verification"
+            aria-pressed={verifyOpen}
+            title="Site verification"
+          >
+            <VerifyIcon />
+          </button>
           <SettingsMenu globe={globe} />
         </div>
       </header>
 
+      <HeatmapLayer globe={globe} />
       <TargetBar globe={globe} />
-      <InfoCard globe={globe} />
+      {verifyOpen ? <VerifyPanel globe={globe} /> : <InfoCard globe={globe} />}
       <Hud globe={globe} />
       <Controls globe={globe} />
       <div ref={creditsRef} className="credits" />

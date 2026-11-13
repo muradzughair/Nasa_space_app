@@ -77,3 +77,11 @@ export const ChevronIcon = () => (
     <path d="m6 9 6 6 6-6" />
   </Icon>
 );
+
+export const VerifyIcon = () => (
+  <Icon>
+    <path d="M9 4H6a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1h-3" />
+    <rect x="9" y="2.500" width="6" height="3.500" rx="1" />
+    <path d="m9 13.500 2.200 2.200L15.500 11" />
+  </Icon>
+);

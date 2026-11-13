@@ -2,6 +2,8 @@
 
 Click any spot on Earth, press **Score this spot**, and see how similar it is to Mars and to the Moon, with the reasons. Then fly to the matching region on the other world.
 
+A researcher can also turn on a **similarity heatmap** of the whole Earth for the chosen version of Mars or the Moon, pick a promising cell, and write a **local verification request**: a video of the place with specific questions for people who know it. Contributors answer; the researcher reviews. See [Similarity heatmap](#similarity-heatmap) and [Site verification](#site-verification).
+
 Built for the NASA Space Apps terrestrial-analog challenge. The scoring follows a written metrics brief ("Mars and Moon Analog Sites on Earth"): nine metric groups, separate weights for Mars and the Moon, eight versions of the two bodies to compare with, and a geometric mean so that one poor match pulls the whole score down. It is deliberately strict: the median land cell scores about 10%, and the best place on Earth reaches 58% for Mars and 78% for the Moon.
 
 React, TypeScript, Vite and CesiumJS. It runs with no API keys.
@@ -40,6 +42,8 @@ Then open the URL Vite prints (http://localhost:5173 by default).
 - **Sub-scores with their evidence.** A radar chart of the metric groups, "What matches", "Where it breaks down", and every group with its weight, its parts, the Earth value against the target, and whether each value was measured, mapped, published or estimated. A line states how much of the score rests on estimates.
 - **Fidelity gaps.** Gravity, atmosphere, radiation, magnetic field and day length are listed on every result and never scored.
 - **Reference sites.** 27 curated sites (8 established analogs, 19 less-studied) ranked for the chosen version, each with its own card. They use their own finer measurements and the materials reported in the cited papers.
+- **Similarity heatmap.** "Show similarity heatmap" in the bar on the left scores every land cell against the chosen version with the same function as the cards and colours the globe, with an opacity slider, a highlight threshold and a legend.
+- **Local verification.** "Request local verification" on any scored card starts a request; the clipboard button in the top bar opens the workspace with requests, contributor responses, review and export.
 - **Fly between worlds.** "Fly to …" goes to the region that stands for the chosen version: Gale, Jezero, Meridiani, Daedalia Planum, Arcadia on Mars; Mare Tranquillitatis, the Descartes highlands and Connecting Ridge on the Moon.
 - **Science overlays on Earth.** Land surface temperature, surface dust, snow cover and vegetation from NASA GIBS, in the layers menu.
 
@@ -107,6 +111,64 @@ Jezero, Arcadia, Tranquillitatis and the south pole are measured by `scripts/bui
 | Holocene volcanoes | Smithsonian Global Volcanism Program (1,214), with rock type | Same |
 
 `npm run grid` needs `EARTHDATA_TOKEN` for MODIS (see Configuration). Everything is cached in `scripts/.cache`; a first run takes one to two hours for terrain and about 45 minutes for POWER (5,343 requests, three at a time; the service answers HTTP 429 if pushed harder). `npm run grid -- --report` prints the benchmark sites and the best cells for every version; add a version id (`--report moon-maria`) for one.
+
+## Similarity heatmap
+
+`src/analog/heatmap.ts`. There is no second formula: the value of a cell is `similarity(cellAt(grid, centre).measures, profile)`, the same lookup and the same function a click on the cell centre uses.
+
+- **Computed in the browser, on demand.** Switching the heatmap on downloads `grid.bin` (if it is not there yet) and scores the 92,172 land cells in 10 ms slices, so the page stays responsive; it takes a second or two. Results are cached per version, so returning to a version is immediate. An interrupted run keeps its progress.
+- **No stale maps.** When the body or version changes, the old layer is removed at once and the new one is drawn only when that version's scores exist.
+- **Real resolution.** One pixel per 0.5° cell, drawn with nearest-neighbour filtering: no smoothing or interpolation.
+- **Missing is not low.** Sea and land with no grid cell are fully transparent. Land below the highlight threshold is drawn as a faint grey wash, so it stays distinct from places with no score. The threshold changes drawing only; scores are untouched.
+- **Colour scale.** One hue, dark to light, fixed from 0% to 60% (higher scores share the top colour; the best cell on Earth is 76%), so versions can be compared with each other.
+- **Similarity and rank are separate.** The card of a selected cell shows the cell's similarity and, on its own row, its rank among land cells ("top 0.4%"). A rank is never shown as a percentage of similarity.
+- **Cell, point and reference site.** A cell's value is for its sampled data (climate and rock class over about 50 km, terrain in a 32 km window, craters and volcanoes measured from the cell centre). A clicked point in the same cell can score differently because craters and volcanoes are measured from the point. A curated reference site uses its own finer measurements and published materials, so its card can differ from the cell beneath it. The card says which is which; a cell value is not a promise for every coordinate inside it.
+
+While the heatmap is on, a click opens the breakdown directly (every cell is already scored). With it off, the **Score this spot** button works as before and the grid is not downloaded until it is pressed.
+
+## Site verification
+
+A local prototype of the loop "researcher asks, people who know the place answer, researcher reviews". Code in `src/verify/` and `src/components/verify/`.
+
+**There is no backend.** Requests, responses, reviews and attached files are stored in this browser only (IndexedDB database `analog-atlas-verification`). Nothing is shared between users or sent to NASA. Records travel by hand: export a JSON bundle (attachments included), send the file, import it on the other computer.
+
+### Three kinds of record, kept apart
+
+| Record | Store | What it is |
+| --- | --- | --- |
+| Model-derived score | `requests[].model` | A snapshot of `evaluate()` when the request was made: overall score, every group and part, data confidence, the heatmap cell's value and rank, sources. Written once |
+| Contributor observation | `responses` | What a contributor reported: visited or not, an answer per question, video time, map point, explanation, evidence |
+| Reviewed finding | `reviews` | The researcher's decision on one response: unreviewed, needs more evidence, accepted or rejected, with a note |
+
+Nothing copies a value from one store into another, and no code path feeds a response or a review into `scoring.ts`. "Accepted" means accepted by the reviewer in this workflow; it is not an approval by NASA or anyone else.
+
+### The request
+
+"Request local verification" (on a scored spot or a reference site) drafts a request with: site name and exact coordinates; the chosen version; the score, breakdown and sources as they stand; a purpose; a route; a video; dataset dates and resolutions where the project records them ("not recorded in the app" otherwise); three standard questions; and a list of observations asked for.
+
+Items in that list marked **missing**, **estimated** or **coarse data** are generated only from the data: a metric group with no data, a part the model flags as a proxy (regolith, inferred landforms, salts, permafrost), a rock class taken from the 0.5° map, values that are 50 km cell averages, a cell with no MODIS temperature. Each carries its reason. The researcher can remove any of them and add questions and requests of their own.
+
+### The video, and what the rover is
+
+**No rover simulator exists in this repository, and none is connected.** The app says so on every request. What it offers instead:
+
+- **Attach a video** by file (stored with the request) or by URL, with a line saying what it is.
+- **Record a terrain preview.** `GlobeController.playWalkthrough` moves the camera along the route above the ground and records the canvas (MediaRecorder, WebM). It is satellite imagery draped on the elevation model, nothing else: no vehicle, no wheels, no soil, no generated rocks. Every frame carries the label "Terrain preview · not a rover simulation", and the heatmap is hidden while it runs. Preview, record, replay, record again and "Export video file" are provided. If the browser cannot record, or the recorder returns an empty file, the form says so and nothing is saved as a video.
+- **Rover hand-off file** (the integration point). "Rover hand-off file" on a request downloads JSON (`roverHandoff()` in `src/verify/exchange.ts`) with the request id, site coordinates, version and route waypoints. An external simulator that reads it knows what to drive; its video comes back through "Attach a file". Nothing reads this file today.
+
+Contributor feedback is about whether the landscape shown matches the real place. It says nothing about rover traction, suspension or soil physics, and the interface tells contributors so.
+
+### Responding and reviewing
+
+A contributor opens a request, sees the site and route on the globe, watches the video, says whether they have been at the exact point, and answers each question with Matches, Differs or Cannot judge, optionally with the current video time, a point picked on the globe and an explanation (required for Differs). They can attach photographs or files with an observation date, coordinates and a source link, and reply to the observations asked for. For a preview recorded in the app, a video time is also translated to the camera's position on the route.
+
+The review screen lists each response with its evidence and lets the researcher set a status and a note. From a request: **Site report (Markdown)**, **Request, responses and files (JSON)** (re-importable), **Rover hand-off file**, and delete.
+
+### Not in this version
+
+- Sharing, accounts, moderation: needs a backend.
+- A rover simulation: see above.
+- **Custom targets.** The comparison targets are the eight versions listed below. Clicking an arbitrary point on the Moon or Mars does not create a target to compare with; that would need per-point Moon and Mars measurements and is a separate extension.
 
 ## Benchmarks
 
@@ -190,6 +252,8 @@ The Earth globe's own sources (Esri World Imagery and elevation, Sentinel-2 clou
 | Whole globe | Globe button (bottom right) | Same |
 | Choose Mars or the Moon, and the version | Bar at the top left, or the card | Bar under the top bar |
 | Ranked reference sites | "27 reference sites, ranked" in the bar | Same |
+| Similarity heatmap | "Show similarity heatmap" in the bar; then click a cell | Same |
+| Verification workspace | Clipboard button in the top bar, or "Request local verification" on a card | Same |
 
 On Earth, search accepts country and city names and coordinates. On the Moon and Mars it accepts coordinates. White dots mark the reference sites on Earth and the reference regions on the Moon and Mars.
 
@@ -215,14 +279,24 @@ src/
     scoring.ts               The whole model: groups, weights, versions, scales, evaluate()
     data.ts                  Types for analogs.json (reference sites, body facts, sources)
     grid.ts                  Loads grid.bin and looks up what is known about a point or a site
+    heatmap.ts               Every land cell scored with similarity(); cache per version, ranks, colours
     Radar.tsx                SVG radar chart
   components/
     TargetBar.tsx            Mars or Moon, version, ranked reference sites (left)
     InfoCard.tsx             The clicked place, the Score button, the two headline numbers (right)
     AnalogCard.tsx           Full card of a reference site
     Comparison.tsx           Radar, what matches, where it breaks down, every group with its parts
+    HeatmapControls.tsx      Heatmap switch, sliders, legend, and the layer on the globe
+    verify/                  Verification workspace: request form, contributor form, review, export
     ...                      Planet switcher, search, layers menu, readout, zoom buttons
+  verify/
+    types.ts                 The three record kinds
+    db.ts                    IndexedDB stores (requests, responses, reviews, files)
+    build.ts                 Drafts a request from an evaluation; data-supported questions
+    exchange.ts              JSON bundle export/import, Markdown report, rover hand-off file
+    route.ts                 Route geometry
   globe/                     Cesium viewer per world, imagery, terrain
+  globe/walkthrough.ts       Camera pass along a route and its recording (terrain preview)
   geo/                       Natural Earth lookup, Nominatim client, coordinate parsing
 scripts/
   build-grid.mjs             Measures every land cell; writes public/data/grid.bin; --report for benchmarks
@@ -235,7 +309,7 @@ scripts/
   build-geodata.mjs          Builds the Natural Earth files
 ```
 
-`GlobeController.setHeatmap` remains from the earlier whole-planet similarity map and is no longer called.
+`GlobeController.setHeatmap` draws the heatmap layer; `HeatmapControls.tsx` calls it.
 
 ## What was verified
 
@@ -249,6 +323,17 @@ Automated run in installed Edge (headless, hardware WebGL) against the dev serve
 - **Phone width.** No horizontal overflow.
 - **Console.** No errors. `npm run build` passes.
 
+Heatmap and verification run (same setup, 37 checks, all passing):
+
+- **Scores unchanged.** Before any code change, all 92,172 cells × 8 versions, the 27 reference sites × 8 versions with full breakdowns, and four sample points were scored and saved; the same run afterwards is identical. `scoring.ts`, `grid.ts`, `data.ts`, `public/data` and `scripts/` have no changes.
+- **Heatmap equals the scoring function.** In the browser, every cell's heatmap value equals `similarity(cellAt(centre).measures, profile)` exactly (0 mismatches of 92,172, for three versions), and matches the saved baseline to within 2 × 10⁻¹⁶ (Node and Edge differ in the last bit of some results).
+- **Drawing.** The layer is 720 × 360, one pixel per cell, each land pixel the colour of its score; 0 sea pixels painted. With the threshold at 25%, scores are identical and land below it is drawn faint, not removed.
+- **Changing body or version** removes the old layer in the same frame and draws the new version's scores; a cached version returns immediately.
+- **Workflow.** Select a cell, open a request, generate a route, record a terrain preview (a playable 1280 px WebM), save, respond with a video time, a map point and a photograph, review as accepted. After a reload the request, video, photograph and review are all there. The stored model snapshot is byte-identical before and after the response and review, and equals `evaluate()` for the point. Export, delete and import restore everything.
+- **Console.** No errors. `npm run build` passes. No horizontal overflow at 390 px.
+
+Not verified for the new parts: recording on Firefox and Safari, video files larger than a few megabytes in a bundle (they are base64 in JSON and will be slow), a recording made on the integrated GPU (the run used the RTX 4070), and the forms on a phone beyond the overflow check.
+
 Not verified: screen-reader output, widths between 640 and 1440 px, and frame rate (the rendering path was not changed).
 
 ## Known limitations
@@ -261,4 +346,7 @@ Not verified: screen-reader output, widths between 640 and 1440 px, and frame ra
 - **Two island reference sites** (Lanzarote, Ward Hunt Island) have no grid cell, so soil wetness, albedo, UV, cloud and swing are missing from their scores.
 - **One year of MODIS** (2023); POWER is a 2001–2025 climatology.
 - **Moon and Mars are smooth globes** with no 3D terrain and no place names.
+- **Heatmap cost.** The first heatmap of a version scores 92,172 cells on the main thread in slices; expect one to three seconds on a laptop. Eight cached versions hold about 6 MB.
+- **Verification is local.** One browser profile, no accounts. Clearing site data deletes everything that was not exported.
+- **Terrain preview.** It shows what the imagery source has. In remote places fine imagery tiles do not exist and the ground reads "Map data not yet available" below a few hundred metres; the capture date of the imagery is not known to the app.
 - **Public services.** Trek, GIBS, Esri and Nominatim are shared public endpoints with fair-use limits.
