@@ -1,0 +1,31 @@
+{
+ "generated": "2026-11-08 12:33:43",
+ "demo": true,
+ "earth_terrain": "demo",
+ "target_terrain": {
+  "moon_sp": "demo",
+  "moon_a11": "demo",
+  "mars_jezero": "demo",
+  "mars_gale": "demo"
+ },
+ "note": "DEMO DATA: terrain, climate and soil values here are synthetic placeholders, not measurements.",
+ "placeholder_traits": [
+  "temp_mean",
+  "temp_range",
+  "soil",
+  "dust",
+  "sun_elev",
+  "relief",
+  "slope_med",
+  "slope_p90",
+  "roughness"
+ ],
+ "patches": "synthetic stand-in terrain (see About); fine detail is always synthetic",
+ "explanations": "template",
+ "land_mask": "global-land-mask package (GLOBE-derived, real shape)",
+ "real_files_found": {
+  "moon": false,
+  "mars": false,
+  "earth": false
+ }
+}

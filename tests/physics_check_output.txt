@@ -1,0 +1,59 @@
+
+== lunar_generic: full throttle on flat ground, soil 0.45, mu 0.57
+moon  g=1.62: first-step accel 0.73 m/s2 (traction cap mu N/m = 0.93, motor cap 1.63), wheel spin at launch 43%, terminal speed 0.175 m/s (87% of max), power 114 W
+mars  g=3.71: first-step accel 1.16 m/s2 (traction cap mu N/m = 2.13, motor cap 1.63), wheel spin at launch 0%, terminal speed 0.143 m/s (71% of max), power 144 W
+earth g=9.81: first-step accel 0.39 m/s2 (traction cap mu N/m = 5.64, motor cap 1.63), wheel spin at launch 0%, terminal speed 0.048 m/s (24% of max), power 137 W
+
+== perseverance: full throttle on flat ground, soil 0.45, mu 0.57
+moon  g=1.62: first-step accel 0.73 m/s2 (traction cap mu N/m = 0.93, motor cap 1.56), wheel spin at launch 40%, terminal speed 0.037 m/s (87% of max), power 77 W
+mars  g=3.71: first-step accel 1.09 m/s2 (traction cap mu N/m = 2.13, motor cap 1.56), wheel spin at launch 0%, terminal speed 0.029 m/s (70% of max), power 91 W
+earth g=9.81: first-step accel 0.32 m/s2 (traction cap mu N/m = 5.64, motor cap 1.56), wheel spin at launch 0%, terminal speed 0.009 m/s (21% of max), power 85 W
+
+== Braking from terminal speed (L2): stopping distance
+moon  v0 0.175 m/s stops in 0.0128 m, 0.16 s (decel cap mu g = 0.93 m/s2)
+mars  v0 0.143 m/s stops in 0.0033 m, 0.06 s (decel cap mu g = 2.13 m/s2)
+earth v0 0.048 m/s stops in 0.0000 m, 0.01 s (decel cap mu g = 5.64 m/s2)
+
+== Hill holding and sliding (parked, no input), friction limit atan(mu) = 29.9 deg
+moon  along-slope 20 deg: holds (v 0.000 m/s, moved 0.00 m)
+moon  along-slope 25 deg: holds (v 0.000 m/s, moved 0.00 m)
+moon  along-slope 27 deg: holds (v 0.000 m/s, moved 0.00 m)
+moon  along-slope 30 deg: SLIDES (v -3.000 m/s, moved -19.49 m)
+moon  along-slope 35 deg: SLIDES (v -3.000 m/s, moved -22.12 m)
+earth along-slope 20 deg: holds (v 0.000 m/s, moved 0.00 m)
+earth along-slope 25 deg: holds (v 0.000 m/s, moved 0.00 m)
+earth along-slope 27 deg: holds (v 0.000 m/s, moved 0.00 m)
+earth along-slope 30 deg: SLIDES (v -3.000 m/s, moved -28.27 m)
+earth along-slope 35 deg: SLIDES (v -3.000 m/s, moved -28.69 m)
+moon  side-slope 20 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+moon  side-slope 25 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+moon  side-slope 27 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+moon  side-slope 30 deg: SLIDES sideways (lateral v -0.289 m/s, moved 1.45 m)
+moon  side-slope 35 deg: SLIDES sideways (lateral v -1.904 m/s, moved 9.53 m)
+earth side-slope 20 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+earth side-slope 25 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+earth side-slope 27 deg: holds (lateral v 0.000 m/s, moved 0.00 m)
+earth side-slope 30 deg: SLIDES sideways (lateral v -1.751 m/s, moved 8.76 m)
+earth side-slope 35 deg: SLIDES sideways (lateral v -11.529 m/s, moved 57.69 m)
+
+== Climbing: energy per metre rises with uphill slope (lunar rover, Mars, steady 70% throttle)
+slope 0 deg: speed 0.118 m/s, drive energy 447 J/m, power 133 W
+slope 3 deg: speed 0.084 m/s, drive energy 632 J/m, power 133 W
+slope 6 deg: speed 0.050 m/s, drive energy 815 J/m, power 121 W
+slope 9 deg: speed 0.017 m/s, drive energy 996 J/m, power 97 W
+
+== Same slope, three bodies: can the lunar rover climb 6 deg at full throttle?
+moon  speed 0.154 m/s, climbed 4.6 m in 30 s
+mars  speed 0.095 m/s, climbed 2.8 m in 30 s
+earth speed 0.000 m/s, climbed 0.0 m in 30 s
+
+== Downhill at full throttle (speed governor): 8 deg downhill, lunar rover, no runaway
+moon  speed 0.201 m/s (max 0.2), drive power 0 W
+mars  speed 0.202 m/s (max 0.2), drive power 0 W
+earth speed 0.204 m/s (max 0.2), drive power 0 W
+
+== Determinism: two runs, same scripted inputs, bitwise equal state
+identical: true (x 239.769122, z 1000.016816, E 0.6391 Wh)
+
+== Battery: runs to empty and stops
+empty after 2.66 sim h, 1687 m, then speed 0.0000 m/s
