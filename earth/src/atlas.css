@@ -1,0 +1,737 @@
+/* Analog Atlas: planet switcher, target bar, reading card. Loaded after styles.css. */
+
+.topbar {
+  z-index: 5;
+}
+
+.topbar-lead {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+}
+
+.brand {
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- planet switcher */
+
+.planets {
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.planets button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.planets button:hover {
+  color: var(--ink);
+}
+
+.planets button[aria-checked="true"] {
+  color: #0b0e14;
+  background: var(--ink);
+}
+
+.atlas-eyebrow {
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.atlas-empty {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+.atlas-target-body {
+  display: block;
+  font-size: 10px;
+  font-weight: 560;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.atlas-summary {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.atlas-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.atlas-list {
+  margin: 8px -8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 9px;
+  text-align: left;
+}
+
+.atlas-list button:hover {
+  background: var(--hover);
+}
+
+.atlas-rank {
+  flex: none;
+  width: 20px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink-faint);
+}
+
+.atlas-site {
+  flex: 1;
+  min-width: 0;
+}
+
+.atlas-site-name {
+  display: block;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-site-detail {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.atlas-bar {
+  display: block;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.atlas-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.atlas-score {
+  flex: none;
+  width: 40px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.atlas-foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+/* -------------------------------------------------------------- analog card */
+
+.atlas-back {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -6px;
+  padding: 4px 8px 4px 2px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.atlas-back:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.atlas-title {
+  margin-right: 0;
+  font-size: 21px;
+}
+
+.atlas-match {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+}
+
+.atlas-match-score {
+  font-size: 34px;
+  font-weight: 580;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar {
+  display: block;
+  width: 100%;
+  max-width: 336px;
+  margin: 6px auto 0;
+}
+
+.radar-grid {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+}
+
+.radar-target {
+  fill: none;
+  stroke: var(--ink-dim);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.radar-site {
+  fill: rgba(143, 184, 255, 0.26);
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.radar-label {
+  fill: var(--ink-dim);
+  font-size: 9.5px;
+}
+
+.atlas-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.atlas-key {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--accent);
+}
+
+.atlas-key-target {
+  margin-left: 10px;
+  border-top: 1.5px dashed var(--ink-dim);
+}
+
+.atlas-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.atlas-actions .card-action {
+  margin-top: 0;
+  padding: 9px 8px;
+  font-size: 13px;
+}
+
+.card-action.is-primary {
+  color: #0b0e14;
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.card-action.is-primary:hover {
+  background: #fff;
+  border-color: #fff;
+}
+
+.atlas-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.atlas-section h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.atlas-section p {
+  margin: 0;
+}
+
+.atlas-section ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-section strong {
+  font-weight: 560;
+  color: var(--ink);
+}
+
+.atlas-breaks {
+  margin-left: -18px;
+  margin-right: -18px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--edge);
+  background: rgba(255, 170, 120, 0.06);
+}
+
+.atlas-breaks h3 {
+  color: #ffb999;
+}
+
+.atlas-breaks + .atlas-section {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.atlas-dims {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.atlas-dims div {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.atlas-dims dd {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+}
+
+.atlas-dims .atlas-bar {
+  margin-top: 0;
+}
+
+.atlas-sources {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.atlas-sources summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.atlas-sources ul {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-source-kind {
+  margin-right: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+}
+
+.settings-note {
+  margin: 2px 10px 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+.radar-label.is-missing {
+  fill: var(--ink-faint);
+}
+
+/* -------------------------------------------------------------- target bar */
+
+/*
+ * The compact control on the left. With the reading card on the right it
+ * leaves the middle of the screen, where the whole planet sits, clear: at
+ * 1440 px the globe's disc spans 360 to 1080 px and both columns end short
+ * of it.
+ */
+.targetbar {
+  position: absolute;
+  top: calc(84px + env(safe-area-inset-top));
+  left: calc(var(--gutter) + env(safe-area-inset-left));
+  width: 300px;
+  max-height: calc(100dvh - 176px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: 12px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel-solid);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  animation: rise 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.targetbar-targets {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.targetbar-targets button {
+  padding: 6px 4px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  transition:
+    color 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.targetbar-targets button:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.targetbar-targets button[aria-checked="true"] {
+  color: #0b0e14;
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.targetbar-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 0 8px;
+  font-size: 13px;
+}
+
+.targetbar-target strong {
+  display: block;
+  font-weight: 560;
+}
+
+.targetbar-link {
+  flex: none;
+  color: var(--accent);
+  font-size: 12px;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(143, 184, 255, 0.4);
+  text-underline-offset: 2px;
+}
+
+.targetbar-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.targetbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  border-top: 1px solid var(--edge);
+  font-size: 13px;
+  text-align: left;
+  color: var(--ink-dim);
+}
+
+button.targetbar-row:hover {
+  color: var(--ink);
+}
+
+.targetbar-row select {
+  max-width: 170px;
+  padding: 4px 6px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font: inherit;
+}
+
+.targetbar-disclosure svg {
+  transition: transform 0.18s;
+}
+
+.targetbar-disclosure[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.targetbar-list {
+  padding-top: 4px;
+}
+
+.targetbar-list .atlas-filter {
+  margin-left: auto;
+}
+
+.atlas-list button[aria-current="true"] {
+  background: rgba(143, 184, 255, 0.12);
+}
+
+.heat-legend {
+  padding: 2px 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+.heat-ramp {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.heat-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.heat-legend p {
+  margin: 6px 0 0;
+}
+
+/* ------------------------------------------------------------ reading card */
+
+/* The card on the right is where everything is read; it scrolls inside itself. */
+.card.reading {
+  left: auto;
+  right: calc(var(--gutter) + env(safe-area-inset-right));
+  width: 328px;
+  /* Ends above the zoom buttons, which share the right edge. */
+  max-height: calc(100dvh - 252px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: 16px 18px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--panel-solid);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.reading > .atlas-back {
+  margin-bottom: 8px;
+}
+
+.cell-note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--edge);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.cell-targets [role="radiogroup"] {
+  display: grid;
+  gap: 2px;
+  margin: 0 -8px;
+}
+
+.cell-targets [role="radio"] {
+  display: grid;
+  grid-template-columns: 1fr 40px;
+  align-items: center;
+  column-gap: 10px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  text-align: left;
+  color: var(--ink);
+}
+
+.cell-targets [role="radio"]:hover {
+  background: var(--hover);
+}
+
+.cell-targets [role="radio"][aria-checked="true"] {
+  background: rgba(143, 184, 255, 0.12);
+}
+
+.cell-target-name {
+  grid-column: 1 / -1;
+  font-weight: 500;
+}
+
+.cell-target-name .atlas-target-body {
+  display: inline;
+  margin-right: 4px;
+}
+
+.cell-targets .atlas-bar {
+  margin-top: 5px;
+}
+
+.cell-targets .atlas-score {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.cell-best {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid rgba(143, 184, 255, 0.5);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.atlas-section p.cell-scale {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.atlas-section ul.cell-caveats {
+  margin-top: 12px;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* ------------------------------------------------------------ small screens */
+
+@media (max-width: 1100px) {
+  .brand {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Two rows: search and buttons, then the planet switcher. */
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .topbar-lead {
+    order: 2;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .search {
+    max-width: none;
+  }
+
+  .planets button {
+    padding: 6px 16px;
+  }
+
+  /* The target bar becomes a strip under the top bar. */
+  .targetbar {
+    top: calc(116px + env(safe-area-inset-top));
+    left: calc(var(--gutter) + env(safe-area-inset-left));
+    right: calc(var(--gutter) + env(safe-area-inset-right));
+    width: auto;
+    max-height: calc(100dvh - 190px);
+    padding: 8px 10px;
+  }
+
+  .targetbar > .atlas-eyebrow,
+  .targetbar-target {
+    display: none;
+  }
+
+  .targetbar-targets {
+    margin: 0 0 6px;
+  }
+
+  .targetbar-row {
+    min-height: 34px;
+  }
+
+  /* The reading card is a sheet rising from the bottom edge. */
+  .card.reading {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    width: auto;
+    max-height: 48dvh;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+    border-width: 1px 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .atlas-breaks {
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 12px 16px;
+  }
+
+  .toast {
+    top: calc(118px + env(safe-area-inset-top));
+  }
+}
