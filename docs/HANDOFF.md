@@ -1,5 +1,89 @@
 # HANDOFF
 
+## Ground realism run (2026-11-13): state at the end
+
+**What is real now.** Jezero and Gale show their real 1 m HiRISE elevation (2 km patch at 0.98 m, real 10 km context ring at 62.5 m), cut from the two local files by `pipeline/fetch_windows.py`. Apollo 11 shows the NASA 3D Resources height map (about 115 m, relief about 5 m in the patch, fine detail synthetic and labelled). The lunar south pole and all 144 Earth hotspot grounds are still demo terrain, and no site has imagery yet. Every ground says which of these it is in a badge on its pane.
+
+**Why the rest is missing.** The build environments (the cloud workspace and the workspace on the project computer) could not reach any data host: USGS, NASA PGDA, LROC, NASA Trek, Copernicus on AWS and EOX all answer HTTP 403 from the network policy. Reading them through the browser was refused as a way around that policy and was not done. Nothing is wrong with the links that were read (see REFERENCES.md, "Ground realism run").
+
+**How to get the rest (one command, on a machine with normal internet).**
+
+```
+pip install numpy scipy pillow rasterio
+python pipeline/fetch_windows.py --check-urls        # one small request per source; prints what answers
+python pipeline/fetch_windows.py --sites targets --force
+python pipeline/fetch_windows.py --sites earth        # all 144 hotspots; --limit 20 for a first batch
+node --experimental-default-type=module tests/ground_check.mjs
+```
+
+Or allow these hosts in the workspace network settings and ask for the fetch to be run again: planetarymaps.usgs.gov, asc-pds-services.s3.us-west-2.amazonaws.com, pds.lroc.im-ldi.com, pgda.gsfc.nasa.gov, trek.nasa.gov, copernicus-dem-30m.s3.amazonaws.com, tiles.maps.eox.at. Or download by hand into `data/raw/sites/<site>/` (the fetcher prefers local files): the Jezero and Gale orthomosaics, `NAC_DTM_APOLLO11.TIF` (113 MB) and its 50 cm orthophoto into `moon_a11`, `ldem_87s_5mpp.tif` into `moon_sp`. The remote code paths (range reads, WMTS, GLO-30 tiles) are tested only on format-faithful synthetic files (`python pipeline/test_fetch_windows.py`); the first real run may need a small fix, and two links are marked `verified: false` in `pipeline/sites.json`.
+
+**What changed in the app**
+
+- `app/js/terrain.js`: `prepareReal` loads and decodes a site's real tiles (16-bit, delta coded, gzip; local files only); `getPatch` returns the fine grid as `p.U` (what is drawn and what the wheels touch) and the context ring as `p.C`; `worldH` uses the real ring beyond the patch.
+- `app/js/ground.js` (new): level-of-detail tiles of the fine grid (16 x 16 tiles on a 2049 grid, strides 1 to 32 chosen by distance, about 4 ms of building per frame, nearest first), edges stitched to the coarser neighbour so there are no cracks, the real context ring with the patch cut out, rule-based rocks near the rover (fixed seed), fading wheel tracks.
+- `app/js/contact.js` (new): one pose routine for the Site View playback and for drive mode. Wheel contacts are bilinear samples of the fine grid, the body is a plane fit through them, each wheel travels on its own to stay on the ground, the computed sinkage lowers the wheels, tracks are laid behind the rear wheels. The models have wheel nodes but no rocker or bogie nodes, so this is the plane-fit fallback, not a rocker-bogie linkage.
+- `app/js/site.js`: ground material rewritten (image drape when a site has imagery, generic photo grain near the camera, lighting and the Slope and Elevation views from a slope texture of the fine grid, so relief looks the same at every level of detail), provenance badges, sun azimuth is now a compass bearing (real sites are north-up), vertical exaggeration scales the ground instead of rebuilding it.
+- `app/js/sim.js`: the route analysis samples the fine grid (HUD tilt and slip come from the surface the wheels touch). Route planning still uses the 129 grid. `app/js/drivemode.js`: shared pose routine, level of detail follows the drive camera, driving is always at true scale. `app/js/main.js`: About rows from the provenance fields. Build id in `app/index.html` is now `20261113b`.
+- Scoring, the globe and the hotspot lists were not touched.
+
+**Rules to keep**
+
+- A ground may be called real only through the fields `fetch_windows.py` writes (`elevation_source`, `elevation_resolution_m`, `imagery_source`, `imagery_resolution_m`, `synthetic_fine`, `date_built`, `real`). Demo patches keep `synthetic_base: true` and the demo badge.
+- Anything that needs a height must go through `surfaceH` / `worldH` / `upsample(p)` so the view, the physics and the HUD stay on the same grid.
+- New code that changes what is on screen calls `wake()`; `Ground.update` must run every drawn frame (it returns the number of tiles still to build).
+
+**Known limits**
+
+- No imagery anywhere yet, so real grounds are drawn with the generic photo texture over the real relief. The image drape code path has only been run on synthetic test tiles.
+- Apollo 11: the STL model's centre and orientation are assumed (centre = landing site, +y = north); at 115 m spacing the patch is almost flat. The 2 m NAC DTM replaces it as soon as it can be fetched.
+- Rocks are illustrative and the wheels do not feel them. Sinkage is millimetres to centimetres, so it is barely visible; tracks are the visible sign.
+- Real-GPU frame rate is still unmeasured (software renderer only). The rover view draws about 200,000 to 400,000 triangles per real ground; lower it with `?lod=0.05` in the address if the demo laptop stutters (default 0.03, smaller is finer).
+- The first Site View open of a real site fetches and decodes about 2.8 MB of heights (about 0.6 s here).
+
+---
+
+## Fix and optimize run (2026-11-13): state at the end
+
+**Rule: init must not abort on a rover failure.** `openSite` (site.js) builds every part inside `guard()`; a failing registry, rover model, texture, panel or drawing step logs to the console, writes a plain "Could not load X: reason" into its own panel and into the note bar (`#siteNote`), and the terrain and render loop carry on. Keep it that way when adding code to `openSite`.
+
+**Root cause of the blank Site View.** `main.js` `openHotspot` wraps `openSite` in `try { ... } catch (e) { console.error(e); }` and then shows the site anyway. Any exception inside `openSite` therefore left the toolbar visible, both canvases black and the Compare, Explanation and Rover simulation panels empty. The exception reproduced here (exact match of the screenshot) was `TypeError: raw.rovers.forEach is not a function` at `rovercfg.js:30` (`loadRegistry`), called from `rovers.js:13` (`initRovers`) and `site.js:270` (top of `openSite`, before anything was drawn), when the registry that reached the page was the old `rover_params.json` format (what a browser that kept an old cached `data.js` loads). With the delivered files and a clean cache the app opens fine for every site and rover (smoke test), so the exact trigger on your machine could not be observed; the classes of failure that produce this symptom are now all non-fatal.
+
+**What changed**
+
+- Failure handling: new `app/js/fallback.js` (built-in stand-in registry, one generic rover), `rovers.js` (`initRovers` falls back; `createInstance` falls back to a box-with-wheels rover and sets `R.modelError`), `site.js` (`guard`, `guardAsync`, `siteNote`, `failPanel`; plain ground material if textures fail; render loop re-armed first and the simulation part wrapped so terrain keeps drawing), `data.js` (registry fetch is optional), `main.js` (message in the note bar if `openSite` itself throws), `index.html` (`#siteNote`), `style.css`.
+- Stale-cache protection: `index.html` has an import map that appends `?v=<build id>` to every module URL and the entry script; `data.js` fetches JSON with `cache: 'no-cache'`. **When you release changed JS, bump the build id in the import map and the `main.js?v=` line** (both in `app/index.html`).
+- Tests: `tests/smoke_site.mjs` (3 sites x 4 rovers, pixel sampling, panels, console and request errors, drive mode open and exit; `--inject` adds injected failures; output `tests/smoke_site_output.txt`) and `tests/perf_site.mjs` (measurements, see PROGRESS.md).
+- Performance: render on demand (a frame is drawn only while playing, animating, orbiting, or for 1.5 s after any input or state change; call `wake()` from any new code that changes what is on screen), pixel ratio capped at 1.5 (`?hq` in the address for 2), everything disposed when leaving Site View (this was a leak of about 19 MB of JS heap and 2 textures per open/close), terrain colour buffers cached per view mode and a shared index buffer, `analyze` and `planRoute` cached per (patch, inputs), customize-drawer changes debounced by 100 ms, HUD without per-frame DOM queries, `patches.bin` (4.9 MB) fetched when a hotspot is clicked instead of at start, ground textures and the renderer prepared during the globe fly-in (`prewarm`).
+- Not done: Web Worker or chunked route planning (planning plus analysis blocks the main thread 90 to 135 ms per rebuild on the software-render machine, debounced, so it was left alone); the two views already share one renderer with scissor viewports.
+
+**Unverified here**: real-GPU frame time (the sandbox only has a software renderer, about 0.25 frames per second while rendering, so the "no frame over 33 ms" target cannot be shown; triangles and draw calls per frame are in PROGRESS.md), real GPU memory, and the first render time on a real laptop.
+
+---
+
+## Rover fleet and customization (2026-11-13): state at the end
+
+R1 to R5 are done. See PROGRESS.md for the details and REFERENCES.md for sources.
+
+**What changed**
+
+- New: `assets/models/rovers.json` (registry, replaces `rover_params.json` in all code), `assets/models/{perseverance,curiosity,lunar_generic}.glb`, `model_report.json`, `previews/`, `pipeline/build_rover_models.py`, `pipeline/render_rover_previews.py`, `tests/model_view.html`, `tests/rover_tests.mjs` (+ output), `app/js/{rovercfg,soilmech,rovers,roverui}.js`.
+- Edited: `sim.js` (analyze takes `S`, Bekker term, power-capped speed, blockers; verdict rows), `drive.js` (soil term, readout sinkage and pressure), `site.js` (rover instances, apply build, rover bar), `drivemode.js` (rover line on the chooser, wheel pose), `data.js`, `main.js` (About rows), `index.html`, `style.css`.
+- Data flow: registry row + overrides -> `effective()` in `rovercfg.js` -> one flat config read by sim.js, drive.js, soilmech.js and the views. No per-rover branches. To add a rover: drop a GLB with named wheel nodes into the pipeline table, add a row to `rovers.json`, add a preview.
+- Rebuild models: `python3 -I pipeline/build_rover_models.py` (needs `pip install bpy` and `npm i -g @gltf-transform/cli`; sources in `_local/rover_sources`, not in the repository), then `python3 pipeline/render_rover_previews.py`.
+- Tests: `node --experimental-default-type=module tests/rover_tests.mjs` and `tests/physics_check.mjs`.
+
+**Known limits and open items**
+
+- No Apollo LRV or VIPER model: not reachable from the build sandbox. The Moon rover is a generic one made from primitives and labelled so. If a model is added later, put the source in `_local/rover_sources`, add it to the pipeline table and set `planet: moon`.
+- Many figures are assumed (shown with an "assumed" tag): wheel width, motor power, battery, base power, drive force, drive efficiency, ground clearance for the Mars rovers; every lunar figure. Curiosity mass 899 kg is recalled, not verified. Soil constants are assumed, simplified values; the sinkage model has no bulldozing, shear or grousers.
+- Model sizes: the Curiosity GLB is 3.95 m long (about 2.9 m real body, the arm is included) and the Perseverance GLB is 1.85 m high (about 2.2 m real). Wheel sizes match.
+- The preset drive force and the 3000 Wh Mars battery are tuned so the default route completes; they are assumptions, not published figures. The reachability verdict is a screening result (one battery charge, no recharge).
+- Real DualSense and real-GPU performance were not tested; headless Chromium with a software renderer was used.
+- The old line "only the lunar rover's wheels visibly rotate" no longer applies: all three models have named wheel nodes that spin and move with the contact fit.
+
+---
+
 ## Drive mode (2026-11-13): state at the end
 
 D1 to D5 are all done and the app is runnable. Nothing is half done. Pipeline and scoring were not touched; the automatic Site View simulation still works after drive mode (checked: enter and exit drive on both grounds, then play the simulation to a verdict).

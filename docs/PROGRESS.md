@@ -96,3 +96,67 @@ Extra decisions: Square and the Resync button both return both rovers to the sta
 ### Drive mode verification (software rendering, mock controller)
 
 Physics checks (`node --experimental-default-type=module tests/physics_check.mjs`, output in `tests/physics_check_output.txt`): same throttle gives different accelerations on the Moon, Mars and Earth for the right reasons (traction-limited on the Moon with 40 to 43 percent wheel spin at launch, motor-limited on Mars, resistance-limited on Earth where the lunar rover reaches only about a quarter of its top speed and the Mars rover about a fifth); braking is traction-limited; a parked rover holds below atan(mu) (29.9 degrees at soil 0.45) and slides above it, along and across the slope; energy per metre rises with uphill slope (447, 632, 815 and 996 J/m at 0, 3, 6 and 9 degrees); downhill full throttle stays at the top speed (governor); two runs with identical scripted inputs give bitwise identical state; the battery runs empty after 2.66 simulated hours and the rover stops. Browser checks with an injected standard-mapping DualSense mock: R2 and left stick drive and steer, Triangle, L1 and R1, D-pad, Create, Options, PS or H, Square and Circle events work, vibration calls reach the actuator, disconnecting pauses with the banner and a key press resumes, Esc exits and restores the Site View cameras exactly, re-entering and choosing the other ground works, full screen is granted. JS cost per frame at x10 with the comparison on: physics about 0.8 ms (at the software renderer's 15 frames per second; fewer steps per frame at 60 fps), dust 0.1 ms, HUD 0.2 ms. Real GPU frame rate was not measured (no GPU here).
+
+## Rover fleet and customization, 2026-11-13
+
+Milestones R1 to R5. Reading order followed (HANDOFF, REFERENCES, rover params, drive, sim, site, drivemode, notices). `assets/models/rover_params.json` is no longer read by any code; `assets/models/rovers.json` replaces it.
+
+- **R1 (done)** `assets/models/rovers.json`: id, name, mission, planet, model file and scale, wheel node names, and a `fig` object where every number is {value, unit, source_id, verified}. Four rovers: Perseverance (REAL; mass 1025 kg, 6 wheels, wheel radius 0.2625 m, top speed 0.042 m/s and slope limit 30 deg verified from NASA pages, the rest assumed), Curiosity (REAL; wheel radius verified through PIA15682, mass 899 kg recalled and unverified, rest assumed), Scarecrow (TEST ROVER; Curiosity geometry, mass derived as Curiosity mass x g_mars / g_earth = 340 kg), generic lunar rover (GENERIC; everything assumed). No Apollo LRV or VIPER model could be downloaded here (NASA hosts and the GitHub API were not reachable from the build sandbox, and no licence could be checked), so the Moon rover is the clearly labelled generic one built from primitives.
+- **R2 (done)** `pipeline/build_rover_models.py` (bpy 5.3.0 and gltf-transform; run with `python3 -I pipeline/build_rover_models.py [ids]`, sources in `_local/rover_sources`). Normalises to metres, forward +Z, origin at the wheel contact plane, wheels as named nodes `wheel_01_L` .. `wheel_03_R` (4-wheel models use rows 01 and 03). Perseverance: the Draco file is decoded and re-encoded to meshopt (the app already vendors the meshopt decoder, so no Draco decoder is shipped); its fused wheel mesh is split into six wheels by loose parts and k-means. All GLBs are under 6 MB and `assets/models/model_report.json` lists measured sizes. Mismatches flagged: Curiosity model length 3.95 m against about 2.9 m real body length, Perseverance height 1.85 m against about 2.2 m real.
+- **R3 (done)** `app/js/rovercfg.js`: effective config = registry rover + overrides clamped per planet (mass, wheel count 4 or 6, wheel radius, wheel width, motor power, battery, top speed), plus cosmetic body colour, dust and number decal. drive.js, sim.js and soilmech.js read only this config. Wheel nodes are scaled, hidden or duplicated; the body is not deformed. Badge flips REAL to CUSTOM on any override. Reset, save and load as JSON, last build remembered in localStorage (try/catch). Assumptions: drive force scales with motor power and falls with top speed (gear); ground clearance follows the wheel radius.
+- **R4 (done)** `app/js/soilmech.js`: Bekker-style sinkage and compaction resistance per wheel (assumed, simplified soil constants per ground type, see REFERENCES.md). `sim.js analyze()` adds the compaction term to energy per metre, caps speed by motor power, flags blocked samples (force or traction) and returns energy in Wh, battery, reachable, blockers, sinkage and pressure. drive.js includes the same resistance. Reachability uses the 98th percentile route tilt and tolerates up to 5 percent blocked samples so one noisy sample on the synthetic terrain does not decide. Tests: `tests/rover_tests.mjs` (output `tests/rover_tests_output.txt`): heavier or narrower sinks more, lower gravity gives less wheel load (Moon 7.9 mm, Mars 13.7 mm, Earth 26.4 mm for the Perseverance preset), bigger battery gives longer range, Scarecrow Earth wheel load equals Curiosity Mars wheel load (3335 N each), unreachable and reachable verdicts follow the build, deterministic.
+- **R5 (done)** `app/js/roverui.js`: rover bar on the site view (name, badge, key figures with assumed tags, Change rover, Customize, Compare two builds), picker with preview cards, customize drawer with live readout (weight, ground pressure, sinkage, top speed, range on each ground), compare A/B on one ground, rover line with picker on the drive start screen. Every assumed figure carries an "assumed" tag with a tooltip naming the source or "no source". The verdict table gained sinkage, ground pressure and battery rows plus reachability notes.
+
+Note on numbers: energy per metre on the first frame (for example Gale 1948 J, Earth 3381 J for the Perseverance preset) now includes the compaction term and is not comparable with the earlier end-of-run figures in this log (1096 and 2337 J/m before the soil term). The preset drive force (about 0.8 of the Mars weight) and the 3000 Wh battery of the two Mars rovers were changed from the first-draft values (0.4 of the weight, 250 Wh) because the default build could not complete the default route; both are assumed.
+
+Model switching check (headless Chromium, three.js renderer info): geometries 309 (Perseverance) to 153 (Curiosity) to 50 (lunar) and back to 309; old templates are disposed (stats count disposed geometries, materials and textures) and do not accumulate.
+
+## Fix and optimize run, 2026-11-13
+
+**Reproduction.** Opening Site View with a registry that is not in the `rovers.json` format (for example the old `rover_params.json`, as an old cached `data.js` would load) gave the reported picture exactly: toolbar visible, both canvases black, Compare, Explanation and Rover simulation empty (the screenshot matched your description). Console: `TypeError: raw.rovers.forEach is not a function at loadRegistry (rovercfg.js:30), initRovers (rovers.js:13), openSite (site.js:270), openHotspot (main.js:116)`. `main.js` caught the error, logged it and showed the half-built site anyway. With the delivered files and a clean cache every site and rover preset opened correctly in headless Chromium, so the trigger on the original machine could not be observed directly (see HANDOFF.md).
+
+**Fix.** Each part of `openSite` is guarded (registry, rover panel, textures, terrain data, labels, comparison table, explanation, rover simulation panel, 3D terrain, rover, route and analysis, camera); a failing part writes "Could not load X: reason" into its panel and the note bar, a built-in stand-in rover (box with wheels) is used when the registry or model fails, the render loop re-arms itself first and cannot be stopped by one bad frame, and module URLs carry a build id so stale cached modules cannot mix with new ones. `tests/smoke_site.mjs` passes for 3 sites x 4 rovers (zero console errors, zero failed requests, canvases not flat, all panels filled, drive mode opens and exits) and for four injected failures (registry 404, wrong registry format, GLB 404, texture 404); output in `tests/smoke_site_output.txt`. Run against the code before the fix, the wrong-registry case fails ("Site View still opens": FAIL).
+
+**Measurements** (`tests/perf_site.mjs`, headless Chromium, 1366x768, software renderer SwiftShader on a shared CPU, Gale hotspot 1; `tests/perf_before.json` and `tests/perf_after.json`). A software renderer needs about 4 s per frame for this scene, so absolute frame times are not those of a laptop; the JS-side numbers and the counts carry over.
+
+| Measure | Before | After |
+|---|---|---|
+| Bytes loaded at page start | 14.7 MB | 9.8 MB (`patches.bin`, 4.9 MB, now fetched on the first hotspot click) |
+| Bytes loaded after Site View opens | 20.5 MB | 20.5 MB (same assets, nothing new fetched) |
+| Click on hotspot to Site View open (includes the 1.2 s globe fly-in) | 20.1 s | 14.0 s |
+| `openSite` main-thread time | 1.80 s | 1.79 s (stages: terrain 86 ms, first rover model load 520 ms, routes and analysis 90 to 135 ms, the rest texture loading) |
+| Idle for 10 s: frames drawn, JS time per frame | 2 frames, 34 ms | 600 frames at 16.7 ms spacing, 0.03 ms JS each (nothing is drawn) |
+| Orbiting 10 s: JS time per frame (mean) | 34.7 ms | 11.5 ms (rasterization excluded) |
+| Triangles and draw calls per frame (both views, shadows included) | 470,636 and 599 | unchanged (no terrain changes were allowed) |
+| JS heap after 10 open/close cycles | 46 MB, 238 MB (+19 MB per cycle) | 43.5 MB, 47.4 MB (flat) |
+| Textures held, geometries, programs after 10 cycles | 49 (+2 per cycle), 309, 29 | 29, 309, 29 (flat) |
+| Pixel ratio | 2 cap | 1.5 cap (2 with `?hq`) |
+
+Targets: no memory growth across 10 cycles met; no slow frame while idle met (idle frames cost nothing); first render under 2 s: `openSite` takes 1.8 s here but the first software-rendered frame is not included, so a real laptop was not measured; steady 60 fps and no frame over 33 ms while orbiting could not be verified because the sandbox has no GPU (the scene is 470 k triangles and 599 draw calls per frame including two 2048 pixel shadow maps; this is the first place to look if an integrated GPU stutters: reduce the shadow map size in `buildSide` or the LOD distances). GPU memory could not be read; geometry, texture and program counts from the renderer are used instead.
+
+Optimization list status: 1 render on demand and pause when hidden (done; the browser pauses `requestAnimationFrame` in a hidden tab and `wake()` runs on return); 2 pixel ratio cap and sizing to the stage (done; one canvas sized to its stage); 3 dispose on leaving Site View, switching rover or site, cached single rover template, drive module already lazy (done); 4 no per-frame allocation in the pose and HUD code (done); 5 colour buffers per view mode cached and shared index buffer (done); 6 caching per (site, rover config) and 100 ms debounce (done; Web Worker or chunking not done, planning blocks about 135 ms at most); 7 assets checked: GLBs 2.6 MB, 0.9 MB, 16 KB, ground textures 1K, JSON loaded once, `patches.bin` now lazy (done); 8 one renderer with two scissor viewports already (nothing to do).
+
+## Ground realism run, 2026-11-13
+
+Done: G1 window fetcher (`pipeline/fetch_windows.py`, sources in `pipeline/sites.json`, self-test `pipeline/test_fetch_windows.py`), G2 provenance fields in `patches_index.json`, G3 level-of-detail ground with stitched edges, real context ring, slope-texture lighting, image drape path, rocks, G4 shared contact routine (`app/js/contact.js`) with sinkage and tracks, G5 badges, About rows and docs. Scoring and globe untouched.
+
+| Site | Elevation | Imagery | Synthetic part |
+|---|---|---|---|
+| Jezero | HiRISE DTM mosaic, 1 m (real, local file) | missing (host blocked) | rocks, close-up grain |
+| Gale | MSL Gale merged DEM, 1 m (real, local file) | missing (host blocked) | rocks, close-up grain |
+| Apollo 11 | NASA 3D Resources STL, about 115 m (real, coarse) | missing (host blocked) | fine detail below about 230 m |
+| South pole | demo (LOLA host blocked) | missing | all |
+| Earth hotspots (144) | demo (GLO-30 host blocked) | missing | all |
+
+Measurements (headless Chromium, software renderer, Gale target, `tests/perf_site.mjs`; before = `perf_after.json` of the fix run, after = `perf_ground.json`):
+
+| Measure | Before | After |
+|---|---|---|
+| Bytes after opening Site View | 20.5 MB | 23.4 MB (+2.8 MB real heights) |
+| openSite | 1.79 s | 2.41 s measured; real tiles now load during the fly-in, which cut the tile stage from 0.56 s to 0.32 s afterwards |
+| JS per frame while orbiting (mean / max) | 11.5 / 62 ms | 13.9 / 68 ms |
+| Triangles and draw calls per frame | 470,636 and 599 | 494,668 and 605 |
+| JS heap over 10 open/close cycles | 43.5 to 47.4 MB | 61.8 to 63.7 MB (flat after the first open; geometries and textures constant) |
+| Idle frames | 0.03 ms JS | 0.04 ms JS |
+
+Tests: `tests/ground_check.mjs` (wheel-contact heights within 0.014 m of the source on Mars, 0.09 m on Apollo 11; seams closed; provenance), `tests/motion_check.mjs` (rests on the surface, wheels on the fine grid, no popping across tiles, tracks, drive mode), `tests/previews.mjs` (screenshots in `tests/previews/`), plus smoke, physics and rover tests: all pass. Not verifiable here: real-GPU frame rate and first render under 2 s on the demo laptop.

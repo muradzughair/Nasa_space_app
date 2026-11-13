@@ -4,11 +4,15 @@
 import * as THREE from '../vendor/three-bundle.js';
 import { D } from './data.js';
 import { worldH } from './terrain.js';
+import { poseOnGround } from './contact.js';
 import { frictionFromSoil } from './sim.js';
 import { DriveSim, DEMO_SCALES } from './drive.js';
 import { createInput, MAPPING } from './input.js';
-import { refreshAfterDrive, setSitePlaying } from './site.js';
+import { refreshAfterDrive, setSitePlaying, siteHelpers } from './site.js';
 import { motion } from './globeview.js';
+import { R as RS } from './rovers.js';
+import { groundClass } from './soilmech.js';
+import { mountRoverLine } from './roverui.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -17,7 +21,7 @@ const CAMS = ['Chase', 'Low follow', 'Top down'];
 const M = { active: false, busy: false, V: null, sims: [], main: 0, other: 1, input: null, scale: 10, cam: 0, pip: true, detailed: true, paused: false, equalLoad: false, realT: 0, saved: [], camState: [], dust: [], orbit: [0, 0], orbitIdle: 0, thr: 0, str: 0, hudT: 0, toastT: 0, fs: false, showSheet: false, rumble: false, padSeen: 0, frameN: 0, perf: { phys: 0, dust: 0, hud: 0, draw: 0, frame: 0 } };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _X = new THREE.Vector3(), _Y = new THREE.Vector3(), _Z = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _t = new THREE.Vector3();
 const wait = ms => new Promise(r => setTimeout(r, ms * motion.scale));
-const roverPar = () => D.rovers.rovers[M.V.ctx.target.rover];
+const roverPar = () => RS.cfg;   // the effective rover config shared with Site View (rovers.js)
 const roverName = () => roverPar().name.replace(/\s*\(.*?\)\s*/g, ' ').trim();
 const perf = (k, v) => { M.perf[k] += (v - M.perf[k]) * 0.05; };   // moving averages in ms, read by the tests
 const compass = b => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
@@ -25,11 +29,14 @@ const compass = b => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b /
 // ---------------------------------------------------------------- chooser (D1)
 export function openChooser(V) {
   M.V = V; if (M.active || !V.runs) return;
-  const t = V.ctx.target, h = V.ctx.hotspot, par = roverPar(), gE = D.meta.gravity.earth;
-  const card = (i, kind, name, line, g, quality) => `<button class="card dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span><span>${quality}</span></div></button>`;
+  const t = V.ctx.target, h = V.ctx.hotspot, gE = D.meta.gravity.earth;
+  const paintCards = () => {
+  const par = roverPar(), card = (i, kind, name, line, g, quality) => `<button class="card dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span><span>${quality}</span></div></button>`;
   const q = D.manifest.demo ? 'Demo terrain' : 'Real terrain';
   $('dcCards').innerHTML = card(0, t.body === 'moon' ? 'Moon target' : 'Mars target', t.name, t.note, t.gravity, q) + card(1, 'Earth hotspot', h.name, `Hotspot ${h.rank}, match score ${Math.round(h.score)}/100 for this target`, gE, q);
   $('dcCards').querySelectorAll('.dc-pick').forEach(b => { b.onclick = () => startDrive(+b.dataset.i); });
+  };
+  paintCards(); mountRoverLine($('dcRover'), paintCards);
   const m = $('driveChooser'); m.classList.remove('hidden'); $('dcCards').querySelector('.dc-pick').focus();
   $('dcClose').onclick = () => m.classList.add('hidden');
   m.onclick = e => { if (e.target === m) m.classList.add('hidden'); };
@@ -47,12 +54,13 @@ async function startDrive(i) {
   M.main = i; M.other = 1 - i;
   M.saved = V.cams.map(c => ({ p: c.camera.position.clone(), q: c.camera.quaternion.clone(), t: c.controls.target.clone() }));
   const par = roverPar(), t = V.ctx.target, h = V.ctx.hotspot, gT = t.gravity, gE = D.meta.gravity.earth;
-  M.sims = [0, 1].map(j => new DriveSim(V.sides[j].patch, par, { g: j ? gE : gT, mu: +($(j ? 'muE' : 'muT') || { value: frictionFromSoil((j ? h : t).traits.soil) }).value, soil: (j ? h : t).traits.soil, mass: par.mass_kg }));
+  M.sims = [0, 1].map(j => new DriveSim(V.sides[j].patch, par, { g: j ? gE : gT, mu: +($(j ? 'muE' : 'muT') || { value: frictionFromSoil((j ? h : t).traits.soil) }).value, soil: (j ? h : t).traits.soil, mass: par.mass_kg, S: RS.reg.soils[groundClass((j ? h : t).traits)] }));
   applyMass();
   V.sides.forEach(s => { s.marker.visible = false; s.line.visible = s.lineOn.visible = false; s.rover.root.visible = true; s.pose.init = false; });
   M.dust = V.sides.map((s, j) => makeDust(s, j));
   if (!M.input) M.input = createInput();
   M.input.start(); M.input.rumble = M.rumble; M.pipInit = false;
+  M.lod = [false, false]; V.sides.forEach(sd => sd.tracks.reset()); siteHelpers.setExag(1);   // driving is always at true scale
   M.thr = M.str = 0; M.realT = 0; M.paused = false; M.orbit = [0, 0]; M.camState = [null, null]; M.hudT = 0; M.padSeen = 0; M.showSheet = false;
   $('site').classList.add('drive'); $('driveUI').classList.remove('hidden');
   buildUI(); setPip(M.pip); sheet(false);
@@ -77,7 +85,7 @@ async function exit(immediate) {
   $('site').classList.remove('drive'); $('driveUI').classList.add('hidden'); $('dvPip').classList.add('hidden');
   V.cams.forEach((c, i) => { const s = M.saved[i]; c.camera.position.copy(s.p); c.camera.quaternion.copy(s.q); c.controls.target.copy(s.t); c.controls.update(); c.anim = null; });
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-  refreshAfterDrive(); V.chased = false;
+  siteHelpers.setExag(V.exag); refreshAfterDrive(); V.chased = false;
   if (!immediate) await fade(0, 320); else { $('dvFade').style.opacity = 0; $('dvFade').classList.remove('on'); }
   M.busy = false; delete window.TERRA_DRIVE;
 }
@@ -128,16 +136,8 @@ function makeDust(side, j) {
 // ---------------------------------------------------------------- pose and camera
 function placeAll(dt, snap) { M.sims.forEach((sim, j) => placeRover(j, sim, dt, snap)); }
 function placeRover(j, sim, dt, snap) {
-  const s = M.V.sides[j], f = sim.fit, half = sim.p.size / 2, root = s.rover.root, par = roverPar();
-  const gx = f.sa * f.fx + f.sb * f.rx, gz = f.sa * f.fz + f.sb * f.rz;
-  _Y.set(-gx, 1, -gz).normalize(); _a.set(f.fx, 0, f.fz); _Z.copy(_a).addScaledVector(_Y, -_a.dot(_Y)).normalize(); _X.crossVectors(_Y, _Z).normalize();
-  _m.makeBasis(_X, _Y, _Z); _q.setFromRotationMatrix(_m); _t.set(sim.x - half, f.c, sim.z - half);
-  if (snap || !s.pose.init) { root.position.copy(_t); root.quaternion.copy(_q); s.pose.init = true; }
-  else { root.position.lerp(_t, 1 - Math.exp(-dt * 18)); root.quaternion.slerp(_q, 1 - Math.exp(-dt * 7)); }
-  s.rover.wheels.forEach((w, q) => {
-    w.node.position.y = par.wheel_radius_m + (f.H[q] - (f.c + f.sa * w.u + f.sb * w.v));
-    if (w.spin) w.spin.rotation.x = sim.wheelAng;
-  });
+  // wheel contacts on the fine height grid, the same grid the physics samples; sinkage from the soil model lowers the wheels; tracks are laid behind (contact.js)
+  poseOnGround(M.V.sides[j], sim.x, sim.z, sim.psi, { par: roverPar(), ex: 1, dt, snap, kp: 18, kq: 7, sink: sim.drag ? sim.drag.z || 0 : 0, wheelAng: sim.wheelAng, moving: Math.abs(sim.v) > 0.005 });
 }
 function cameraAll(dt, snap) { cameraFor(M.main, M.sims[M.main], dt, snap, M.V.cams[M.main].camera); cameraFor(M.other, M.sims[M.other], dt, snap, M.V.cams[M.other].camera); }
 function cameraFor(j, sim, dt, snap, cam) {
@@ -182,6 +182,8 @@ const ROWS = [
   ['power', 'Power', 'W', true, true, 20, v => v.toFixed(0)],
   ['energy', 'Energy used', 'Wh', false, true, 1, v => v.toFixed(2)],
   ['epm', 'Energy per metre', 'J/m', false, true, 80, v => v.toFixed(0)],
+  ['sink', 'Sinkage (assumed)', 'mm', false, true, 5, v => v.toFixed(1)],
+  ['press', 'Ground pressure', 'kPa', false, true, 5, v => v.toFixed(1)],
 ];
 const mmss = s => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), q = Math.floor(s % 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(q).padStart(2, '0'); };
 function names() { const V = M.V, t = V.ctx.target, h = V.ctx.hotspot; return [{ short: t.body === 'moon' ? 'Moon' : 'Mars', name: t.name, g: t.gravity }, { short: 'Earth', name: h.name, g: D.meta.gravity.earth }]; }
@@ -205,7 +207,7 @@ function buildUI() {
   tg('dvRumble', M.rumble, v => { M.rumble = v; M.input.rumble = v; toast(v ? 'Vibration on (needs a controller with a rumble motor)' : 'Vibration off'); });
   tg('dvEq', M.equalLoad, v => { M.equalLoad = v; applyMass(); toast(v ? 'Earth rover mass reduced to the target wheel load' : 'Same rover mass on both grounds'); });
   const q = D.manifest.demo ? '<span class="badge">DEMO DATA</span>' : '<span class="badge ok">REAL DATA</span>';
-  $('dvFoot').innerHTML = `${q}<span>${mn.name}, ${mn.short} g ${mn.g} m/s&sup2;</span><span>Rover ${roverName()}</span><span id="dvMass"></span><span class="dv-phys">Physics: screening model (one friction coefficient, no sinkage, not validated). Drive force, power and battery figures are assumptions (verified: false in rover_params.json); the battery bar is an illustrative budget.</span>`;
+  $('dvFoot').innerHTML = `${q}<span>${mn.name}, ${mn.short} g ${mn.g} m/s&sup2;</span><span>Rover ${roverName()}</span><span id="dvMass"></span><span class="dv-phys">Physics: screening model (one friction coefficient, simplified assumed-soil sinkage, not validated). Drive force, power and battery figures are assumptions (verified: false in rovers.json); the battery bar is an illustrative budget.</span>`;
   $('dvPipLabel').innerHTML = `<span class="dv-dot" style="background:${COL[M.other]}"></span>${ot.short}: same inputs, different ground`;
   $('dvSheet').innerHTML = `<h3>Controls</h3><table>${MAPPING.map(r => `<tr><td><kbd>${r[0]}</kbd></td><td>${r[1]}</td><td class="kb">${r[2]}</td></tr>`).join('')}</table><p class="hint">Connect a DualSense (or any standard gamepad) by USB-C or Bluetooth, then press a button. Adaptive triggers are not available in the browser; vibration is optional.</p><button class="btn ghost small" id="dvSheetClose">Close (H)</button>`;
   $('dvSheetClose').onclick = () => sheet(false);
@@ -222,14 +224,14 @@ function sheet(on) { M.showSheet = on; $('dvSheet').classList.toggle('hidden', !
 function setPip(on) { M.pip = on; $('dvPip').classList.toggle('hidden', !on); if ($('dvHud').innerHTML) paintHudMode(); }
 function setScale(s) { M.scale = s; paintTop(); toast(`Demo speed x${s}: simulated time runs ${s} times faster than real time; forces are unchanged`); }
 function cycleCam(d) { M.cam = (M.cam + d + CAMS.length) % CAMS.length; paintTop(); toast('Camera: ' + CAMS[M.cam]); }
-function resetAll() { M.sims.forEach(s => s.reset()); M.dust.forEach(d => d.clear()); M.realT = 0; M.thr = M.str = 0; placeAll(0.016, true); cameraAll(0.016, true); toast('Both rovers reset to the start'); }
+function resetAll() { M.sims.forEach(s => s.reset()); M.dust.forEach(d => d.clear()); M.V.sides.forEach(sd => sd.tracks.reset()); M.realT = 0; M.thr = M.str = 0; placeAll(0.016, true); cameraAll(0.016, true); toast('Both rovers reset to the start'); }
 function toast(msg, ms = 3200) { const b = $('dvBanner'); b.textContent = msg; b.classList.remove('hidden'); b.classList.remove('alert'); M.toastT = performance.now() + ms; M.toastKeep = false; }
 function alertBanner(msg) { const b = $('dvBanner'); b.textContent = msg; b.classList.remove('hidden'); b.classList.add('alert'); M.toastKeep = true; }
 
 function diffClass(a, b, floor) { const d = Math.abs(a - b), rel = d / (Math.max(Math.abs(a), Math.abs(b)) + floor); return rel < 0.1 ? 'd0' : rel < 0.35 ? 'd1' : 'd2'; }
 function updateHud() {
   const R = M.sims.map(s => s.readout()), a = R[M.main], b = R[M.other], par = roverPar();
-  const vals = r => ({ speed: r.speed, screen: r.speed * M.scale, pitch: r.pitch, roll: r.roll, tilt: r.tilt, ahead: r.slopeAhead, slip: r.slip * 100, dist: r.dist, power: r.power, energy: r.energyWh, epm: r.epm, battery: r.battery * 100 });
+  const vals = r => ({ speed: r.speed, screen: r.speed * M.scale, pitch: r.pitch, roll: r.roll, tilt: r.tilt, ahead: r.slopeAhead, slip: r.slip * 100, dist: r.dist, power: r.power, energy: r.energyWh, epm: r.epm, sink: r.sinkMm, press: r.pressKPa, battery: r.battery * 100 });
   const A = vals(a), B = vals(b), cmp = M.pip;
   const set = (el, t) => { if (el.textContent !== t) el.textContent = t; };
   $('dvRows').querySelectorAll('tr').forEach(tr => {
@@ -246,7 +248,7 @@ function updateHud() {
     set(o, y == null ? '-' : f(y)); set(d, (x == null || y == null) ? '' : ((y - x >= 0 ? '+' : '') + f(y - x)));
     d.className = 'cmp d ' + ((x == null || y == null) ? '' : diffClass(x, y, row[5]));
   });
-  // warnings, with the design-system warning colour; the limits come from rover_params
+  // warnings, with the design-system warning colour; the limits come from the rover config
   const W = [], lim = par.slope_limit_deg;
   if (a.tilt > lim) W.push(['bad', `Tilt ${a.tilt.toFixed(0)}° is past the ${lim}° slope limit`]); else if (a.tilt > 0.75 * lim) W.push(['warn', `Tilt ${a.tilt.toFixed(0)}°, limit ${lim}°`]);
   if (Math.abs(a.slopeAhead) > lim) W.push(['warn', `Steep slope ahead (${a.slopeAhead.toFixed(0)}°)`]);
@@ -306,6 +308,7 @@ function renderOnly() {
   const draw = (j, x, y, w, h, ext, shadows) => {
     const s = V.sides[j], cam = V.cams[j].camera, asp = w / h; if (Math.abs(cam.aspect - asp) > 1e-3) { cam.aspect = asp; cam.updateProjectionMatrix(); }
     if (shadows) { sunFor(j, s.rover.root.position, ext); r.shadowMap.needsUpdate = true; } s.sky.position.copy(cam.position);
+    s.ground.update(cam.position, !M.lod[j]); M.lod[j] = true; if (s.ground.rocks) s.ground.rocks.update(s.rover.root.position.x, s.rover.root.position.z);   // level of detail follows the drive camera
     M.dust[j] && (M.dust[j].mat.uniforms.uK.value = h / (2 * Math.tan(cam.fov * Math.PI / 360)));
     r.setViewport(x, y, w, h); r.setScissor(x, y, w, h); r.render(s.scene, cam);
   };

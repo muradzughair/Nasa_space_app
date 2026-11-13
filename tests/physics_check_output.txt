@@ -5,9 +5,9 @@ mars  g=3.71: first-step accel 1.16 m/s2 (traction cap mu N/m = 2.13, motor cap 
 earth g=9.81: first-step accel 0.39 m/s2 (traction cap mu N/m = 5.64, motor cap 1.63), wheel spin at launch 0%, terminal speed 0.048 m/s (24% of max), power 137 W
 
 == perseverance: full throttle on flat ground, soil 0.45, mu 0.57
-moon  g=1.62: first-step accel 0.73 m/s2 (traction cap mu N/m = 0.93, motor cap 1.56), wheel spin at launch 40%, terminal speed 0.037 m/s (87% of max), power 77 W
-mars  g=3.71: first-step accel 1.09 m/s2 (traction cap mu N/m = 2.13, motor cap 1.56), wheel spin at launch 0%, terminal speed 0.029 m/s (70% of max), power 91 W
-earth g=9.81: first-step accel 0.32 m/s2 (traction cap mu N/m = 5.64, motor cap 1.56), wheel spin at launch 0%, terminal speed 0.009 m/s (21% of max), power 85 W
+moon  g=1.62: first-step accel 0.73 m/s2 (traction cap mu N/m = 0.93, motor cap 2.93), wheel spin at launch 68%, terminal speed 0.039 m/s (93% of max), power 78 W
+mars  g=3.71: first-step accel 1.67 m/s2 (traction cap mu N/m = 2.13, motor cap 2.93), wheel spin at launch 27%, terminal speed 0.035 m/s (84% of max), power 98 W
+earth g=9.81: first-step accel 1.69 m/s2 (traction cap mu N/m = 5.64, motor cap 2.93), wheel spin at launch 0%, terminal speed 0.024 m/s (58% of max), power 129 W
 
 == Braking from terminal speed (L2): stopping distance
 moon  v0 0.175 m/s stops in 0.0128 m, 0.16 s (decel cap mu g = 0.93 m/s2)
@@ -53,7 +53,7 @@ mars  speed 0.202 m/s (max 0.2), drive power 0 W
 earth speed 0.204 m/s (max 0.2), drive power 0 W
 
 == Determinism: two runs, same scripted inputs, bitwise equal state
-identical: true (x 239.769122, z 1000.016816, E 0.6391 Wh)
+identical: true (x 239.937549, z 1000.005870, E 0.7846 Wh)
 
 == Battery: runs to empty and stops
 empty after 2.66 sim h, 1687 m, then speed 0.0000 m/s

@@ -34,3 +34,20 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Unfinished browser downloads
+*.crdownload
+*.part
+*.tmp
+
+# Heavy source models and CAD (keep them in _local)
+*.blend
+*.blend1
+*.stl
+*.STL
+*.usdz
+
+# Word documents and generated screenshots (kept locally, regenerable)
+*.docx
+~$*
+tests/previews/

@@ -41,3 +41,21 @@ Not yet added.
 - Country borders (Natural Earth, public domain): naturalearthdata.com, "Admin 0 Countries" 110m or 50m GeoJSON
 - Ground textures (CC0): https://polyhaven.com/a/rocks_ground_02 and https://polyhaven.com/a/coast_sand_rocks_02 (1K JPG: color, normal GL, roughness). License: https://www.polyhaven.com/license
 - Design references: NASA Eyes https://science.nasa.gov/eyes/ and NASA Trek https://trek.nasa.gov/ (screenshots go in /design/refs)
+
+## Apollo 11 landing site (added, page read)
+- NASA Science 3D resource, Apollo 11 - Landing Site: https://science.nasa.gov/3d-resources/apollo-11-landing-site/
+  - One STL height map, 30 x 30 km around the landing site in the Sea of Tranquility, 6.81 MB (page dated Apr 21, 2025).
+  - The page says the vertical axis is exaggerated 60 times: divide heights by 60 before using them as real elevation.
+  - The page names no source dataset and gives no credit or licence line; NASA Brand and Usage Guidelines apply. Resolution is not stated, so treat it as regional context, not rover-scale terrain.
+  - Full list of every reference used in the project: docs/REFERENCES.md
+
+## JPL Open Source Rover (added, page read)
+- README: https://github.com/nasa-jpl/open-source-rover/blob/master/README.md
+  - Open-source, scaled-down 6-wheel rocker-bogie rover from JPL: differential pivot, 6-wheel Ackerman steering, 10 motors, top speed about 1.6 m/s, Raspberry Pi, LiPo 7.2 Ah, at least 3 h of driving, about $1600. Mass, size and wheel diameter are not on the README.
+  - Apache License 2.0, Open-Source Hardware certified. Not a mission rover; use as a reference for rocker-bogie geometry or as a small-rover option.
+  - Parts list: https://github.com/nasa-jpl/open-source-rover/blob/master/parts_list/README.md ; code: https://github.com/nasa-jpl/osr-rover-code
+
+## Files received 2026-11-13
+- Jezero HiRISE DTM (1 m) and Gale merged DEM (1 m) are now on disk in data/raw/sites/. Details, extents and coverage problems: data/raw/INVENTORY.md and docs/REFERENCES.md.
+- Scarecrow, Curiosity's test rover (JPL): https://www.jpl.nasa.gov/images/pia15682-test-rover-aids-preparations-in-california-for-curiosity-rover-on-mars/
+- NASA 3D Resources GitHub mirror: https://github.com/nasa/NASA-3D-Resources

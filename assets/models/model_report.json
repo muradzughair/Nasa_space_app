@@ -1,0 +1,179 @@
+{
+ "curiosity": {
+  "id": "curiosity",
+  "length_m": 3.945,
+  "width_m": 2.782,
+  "height_m": 2.23,
+  "tris": 26471,
+  "wheels": [
+   {
+    "name": "wheel_01_L",
+    "x": 1.063,
+    "y": 0.2517,
+    "z": 1.1483,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   },
+   {
+    "name": "wheel_01_R",
+    "x": -1.0628,
+    "y": 0.2517,
+    "z": 1.148,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   },
+   {
+    "name": "wheel_02_L",
+    "x": 1.1935,
+    "y": 0.2444,
+    "z": -0.0364,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   },
+   {
+    "name": "wheel_02_R",
+    "x": -1.1936,
+    "y": 0.2451,
+    "z": -0.0367,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   },
+   {
+    "name": "wheel_03_L",
+    "x": 1.0628,
+    "y": 0.2426,
+    "z": -1.1102,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   },
+   {
+    "name": "wheel_03_R",
+    "x": -1.0629,
+    "y": 0.2467,
+    "z": -1.1129,
+    "axle": "x",
+    "width_m": 0.3947,
+    "diameter_m": 0.4853
+   }
+  ],
+  "file": "assets/models/curiosity.glb",
+  "size_mb": 0.95
+ },
+ "perseverance": {
+  "id": "perseverance",
+  "length_m": 3.108,
+  "width_m": 2.705,
+  "height_m": 1.846,
+  "tris": 199521,
+  "wheels": [
+   {
+    "name": "wheel_01_L",
+    "x": 1.0624,
+    "y": 0.2627,
+    "z": 1.1483,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.5253
+   },
+   {
+    "name": "wheel_01_R",
+    "x": -1.0624,
+    "y": 0.2627,
+    "z": 1.1483,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.5253
+   },
+   {
+    "name": "wheel_02_L",
+    "x": 1.1845,
+    "y": 0.263,
+    "z": -0.0367,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.5253
+   },
+   {
+    "name": "wheel_02_R",
+    "x": -1.1845,
+    "y": 0.263,
+    "z": -0.0367,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.5253
+   },
+   {
+    "name": "wheel_03_L",
+    "x": 1.0624,
+    "y": 0.2635,
+    "z": -1.1117,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.525
+   },
+   {
+    "name": "wheel_03_R",
+    "x": -1.0624,
+    "y": 0.2627,
+    "z": -1.1117,
+    "axle": "x",
+    "width_m": 0.3356,
+    "diameter_m": 0.5253
+   }
+  ],
+  "file": "assets/models/perseverance.glb",
+  "size_mb": 2.64
+ },
+ "lunar_generic": {
+  "id": "lunar_generic",
+  "length_m": 2.05,
+  "width_m": 1.6,
+  "height_m": 1.645,
+  "tris": 480,
+  "wheels": [
+   {
+    "name": "wheel_01_L",
+    "x": 0.7,
+    "y": 0.275,
+    "z": 0.75,
+    "axle": "x",
+    "width_m": 0.2,
+    "diameter_m": 0.55
+   },
+   {
+    "name": "wheel_01_R",
+    "x": -0.7,
+    "y": 0.275,
+    "z": 0.75,
+    "axle": "x",
+    "width_m": 0.2,
+    "diameter_m": 0.55
+   },
+   {
+    "name": "wheel_03_L",
+    "x": 0.7,
+    "y": 0.275,
+    "z": -0.75,
+    "axle": "x",
+    "width_m": 0.2,
+    "diameter_m": 0.55
+   },
+   {
+    "name": "wheel_03_R",
+    "x": -0.7,
+    "y": 0.275,
+    "z": -0.75,
+    "axle": "x",
+    "width_m": 0.2,
+    "diameter_m": 0.55
+   }
+  ],
+  "file": "assets/models/lunar_generic.glb",
+  "size_mb": 0.01
+ }
+}

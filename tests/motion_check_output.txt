@@ -1,0 +1,30 @@
+
+== mars_jezero: real ground, fine grid 2049 at 0.98 m, rover Perseverance, 1601 steps of 0.25 m, 3 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 13.7 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.264 m, 95 % spread 11 mm, worst 21 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 3.1 mm against the contact plane, pitch 1.40 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (4 of 4 tiles within 25 m at 1:1, largest edge offset 93 mm, 233024 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 13.7 mm)
+PASS  drive mode: the rover drives and sits on the fine grid  (3.5 m driven, pitch 3.9 deg, sinkage 13.6 mm, body 16 mm from the contact plane, 3 tiles at 1:1)
+PASS  zero console and page errors
+
+== mars_gale: real ground, fine grid 2049 at 0.98 m, rover Perseverance, 1601 steps of 0.25 m, 5 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 13.7 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.264 m, 95 % spread 9 mm, worst 13 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 2.7 mm against the contact plane, pitch 0.80 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (2 of 2 tiles within 25 m at 1:1, largest edge offset 38 mm, 242720 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 13.7 mm)
+PASS  drive mode: the rover drives and sits on the fine grid  (3.2 m driven, pitch 0.3 deg, sinkage 13.7 mm, body -15 mm from the contact plane, 4 tiles at 1:1)
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Target page, context or browser has been closed
+    at /home/claude/proj/tests/motion_check.mjs:65:84 {
+  log: []
+}
+
+Node.js v22.23.4
+NOTE  the run did not report the last Gale step (leaving drive mode and closing the page): it hung for more than 4 minutes under the software renderer and was stopped. Leaving drive mode on Gale passes in tests/smoke_site.mjs.

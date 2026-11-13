@@ -1,5 +1,39 @@
 // Terrain patches: decoding, fallback synthesis, slope/roughness grids and colouring.
-import { D } from './data.js';
+import { D, ROOT } from './data.js';
+
+// ---------------------------------------------------------------- real ground (built by pipeline/fetch_windows.py; read from local files only)
+const REAL = new Map();   // patch id -> { F: fine heights, C: context-ring heights }, kept only for the pair of grounds that is open
+async function gunzip(buf) { return new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()); }
+/** Inverse of encode_h16 in the pipeline: two byte planes of row differences (first column: differences down the column) -> metres above the stored minimum. */
+export function decodeH16(u8, n, scale) {
+  const m = n * n, out = new Float32Array(m); let first = 0;
+  for (let i = 0; i < n; i++) {
+    let v = first = (first + (u8[i * n] | (u8[m + i * n] << 8))) & 65535; out[i * n] = v * scale;
+    for (let j = 1; j < n; j++) { const k = i * n + j; v = (v + (u8[k] | (u8[m + k] << 8))) & 65535; out[k] = v * scale; }
+  }
+  return out;
+}
+/** Load and decode the real ground of the given patch ids (those that have one), and drop every other decoded ground. Rejects with a plain reason. */
+const LOADING = new Map();   // patch id -> promise of a load in flight (the same call is made early, at the hotspot click, and again by Site View)
+export async function prepareReal(ids) {
+  for (const k of [...REAL.keys()]) if (!ids.includes(k)) REAL.delete(k);
+  await Promise.all(ids.map(id => {
+    const e = D.patchIdx.patches[id]; if (!e || !e.real || REAL.has(id)) return null;
+    if (!LOADING.has(id)) LOADING.set(id, loadReal(id, e).finally(() => LOADING.delete(id)));
+    return LOADING.get(id);
+  }));
+}
+async function loadReal(id, e) {
+  {
+    const get = async f => { const r = await fetch(`${ROOT}data/processed/${e.real.dir}${f}`, { cache: 'no-cache' }); if (!r.ok) throw new Error(`${e.real.dir}${f}: HTTP ${r.status}`); return gunzip(await r.arrayBuffer()); };
+    const [f, c] = await Promise.all([get('fine.h16'), get('ctx.h16')]);
+    const F = decodeH16(f, e.real.n, e.real.hscale), C = decodeH16(c, e.real.ctx.n, e.real.hscale);
+    let mn = Infinity; for (let i = 0; i < F.length; i++) if (F[i] < mn) mn = F[i];
+    for (let i = 0; i < F.length; i++) F[i] -= mn; for (let i = 0; i < C.length; i++) C[i] -= mn;   // lowest point of the patch = 0 m, as for every terrain here
+    REAL.set(id, { F, C });
+  }
+}
+export const realUrl = (e, file) => `${ROOT}data/processed/${e.real.dir}${file}`;
 
 export function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 export function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -30,7 +64,7 @@ export function roughGrid(h, n) {
 function finish(id, n, size, h, kind, extra) {
   const dx = size / (n - 1);
   let mn = Infinity, mx = -Infinity; for (const v of h) { if (v < mn) mn = v; if (v > mx) mx = v; }
-  if (mn !== 0) { for (let i = 0; i < h.length; i++) h[i] -= mn; mx -= mn; mn = 0; }   // each terrain sits on its own datum: lowest point = 0 m
+  if (mn !== 0 && !(extra && extra.real)) { for (let i = 0; i < h.length; i++) h[i] -= mn; mx -= mn; mn = 0; }   // each terrain sits on its own datum: lowest point = 0 m (a real ground is already on the datum of its fine grid)
   const sl = slopeGrid(h, n, dx);
   return { id, n, size, dx, h, slope: sl, rough: roughGrid(h, n), min: mn, max: mx, kind, stats: { slope_med: median(sl), slope_p90: pct(sl, 0.9), relief: mx - mn }, ...extra };
 }
@@ -55,9 +89,18 @@ function synth(id, traits) {
 export function getPatch(id, traits) {
   const e = D.patchIdx.patches[id];
   if (!e) return synth(id, traits);
+  const r = e.real && REAL.get(id);
+  if (r) {   // real ground: the fine grid is what is drawn and what the wheels touch; the 129 grid for route planning is taken from it
+    const M = e.real.n, step = (M - 1) / (e.n - 1), hc = new Float32Array(e.n * e.n), cx = e.real.ctx;
+    for (let i = 0; i < e.n; i++) for (let j = 0; j < e.n; j++) hc[i * e.n + j] = r.F[i * step * M + j * step];
+    const p = finish(id, e.n, e.size_m, hc, e.kind, { synthetic: !!e.synthetic_fine, syntheticBase: false, real: true, prov: e });
+    p.U = { M, h: r.F, dx: e.size_m / (M - 1), size: e.size_m, real: true };
+    p.C = { n: cx.n, size: cx.size_m, dx: cx.size_m / (cx.n - 1), h: r.C };
+    return p;
+  }
   const raw = new Uint16Array(D.patchBuf, e.offset, e.n * e.n), h = new Float32Array(e.n * e.n);
   for (let i = 0; i < h.length; i++) h[i] = raw[i] * e.hscale;
-  return finish(id, e.n, e.size_m, h, e.kind, { synthetic: true, syntheticBase: e.synthetic_base });
+  return finish(id, e.n, e.size_m, h, e.kind, { synthetic: true, syntheticBase: e.synthetic_base, prov: e, realFailed: !!e.real });
 }
 
 export function sampleH(p, x, z) {
@@ -96,10 +139,13 @@ export function sampleGrid(h, m, dx, x, z) {
   const j = Math.floor(fx), i = Math.floor(fz), tx = fx - j, tz = fz - i;
   return h[i * m + j] * (1 - tx) * (1 - tz) + h[i * m + j + 1] * tx * (1 - tz) + h[(i + 1) * m + j] * (1 - tx) * tz + h[(i + 1) * m + j + 1] * tx * tz;
 }
-/** Surface height at patch coordinates (x, z in 0..size) as rendered (smooth upsampled surface). */
+/** Surface height at patch coordinates (x, z in 0..size), bilinear on the fine grid that is drawn and that the wheels touch (the real fine grid, or the smooth upsampled demo surface). */
 export function surfaceH(p, x, z) { const U = upsample(p); return sampleGrid(U.h, U.M, U.dx, x, z); }
-/** Height under any world point centred on the patch, extended by mirrored repeats (the context tiles around the patch). */
+/** Height under any world point centred on the patch. Beyond the patch: the real context ring when the site has one, otherwise mirrored repeats (demo sites). */
 export function worldH(p, wx, wz) {
+  const half = p.size / 2;
+  if (Math.abs(wx) <= half && Math.abs(wz) <= half) return surfaceH(p, wx + half, wz + half);
+  if (p.C) return sampleGrid(p.C.h, p.C.n, p.C.dx, wx + p.C.size / 2, wz + p.C.size / 2);   // real context ring
   const fold = c => { let t = (((c / p.size + 0.5) % 2) + 2) % 2; if (t > 1) t = 2 - t; return t * p.size; };
   return surfaceH(p, fold(wx), fold(wz));
 }

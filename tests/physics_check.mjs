@@ -1,9 +1,12 @@
-// Physics checks for the drive mode (run: node --experimental-default-type=module tests/physics_check.mjs). Uses synthetic patches and rover_params.json.
+// Physics checks for the drive mode (run: node --experimental-default-type=module tests/physics_check.mjs). Uses synthetic patches and the effective rover configs
+// built from assets/models/rovers.json (preset builds, no soil sinkage term, so the numbers stay comparable with the first drive-mode run).
 import fs from 'node:fs';
 globalThis.document = { querySelector: () => null };   // data.js reads a meta tag at import time
 const { DriveSim, STEP, DEG } = await import('../app/js/drive.js');
 const { frictionFromSoil } = await import('../app/js/sim.js');
-const P = JSON.parse(fs.readFileSync(new URL('../assets/models/rover_params.json', import.meta.url)));
+const { loadRegistry, effective } = await import('../app/js/rovercfg.js');
+const REG = loadRegistry(JSON.parse(fs.readFileSync(new URL('../assets/models/rovers.json', import.meta.url))));
+const P = { rovers: Object.fromEntries(REG.order.map(id => [id, effective(REG, { id, ov: {}, cos: {} })])) };
 const BODY = { moon: 1.62, mars: 3.71, earth: 9.81 };
 function patch(fn, n = 129, size = 2000) {
   const dx = size / (n - 1), h = new Float32Array(n * n); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) h[i * n + j] = fn(j * dx, i * dx);

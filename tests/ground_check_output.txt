@@ -1,0 +1,33 @@
+Sites with a real ground: 3 of 148. Demo (synthetic) grounds: 145.
+
+== tgt_moon_a11: NASA 3D Resources Apollo 11 landing-site height map (STL), 114.99 m; imagery none
+PASS  provenance fields present
+PASS  synthetic_fine matches the 5 m rule  (synthetic_fine true, source 114.99 m)
+PASS  not flagged as a synthetic base
+PASS  wheel-contact heights match the source at 48 random points (limit 0.5 m)  (worst 0.092 m, mean 0.031 m, rover Generic lunar rover)
+PASS  context ring meets the patch at the seam  (largest step 0.0000 m)
+NOTE  no imagery for this site: imagery: LROC NAC orthophoto, Apollo 11 (NASA/GSFC/ASU): the data host could not be reached from the machine that built the tiles (refused by its network policy
+
+== tgt_mars_jezero: HiRISE DTM mosaic, Mars 2020 TRN (USGS), 1 m; imagery none
+PASS  provenance fields present
+PASS  synthetic_fine matches the 5 m rule  (synthetic_fine false, source 1 m)
+PASS  not flagged as a synthetic base
+PASS  wheel-contact heights match the source at 48 random points (limit 0.5 m)  (worst 0.006 m, mean 0.002 m, rover Perseverance)
+PASS  context ring meets the patch at the seam  (largest step 0.0000 m)
+NOTE  no imagery for this site: imagery: HiRISE orthomosaic, Mars 2020 TRN (USGS): the data host could not be reached from the machine that built the tiles (refused by its network policy, HTTP
+
+== tgt_mars_gale: MSL Gale merged DEM, HiRISE-based (USGS), 1 m; imagery none
+PASS  provenance fields present
+PASS  synthetic_fine matches the 5 m rule  (synthetic_fine false, source 1 m)
+PASS  not flagged as a synthetic base
+PASS  wheel-contact heights match the source at 48 random points (limit 0.5 m)  (worst 0.014 m, mean 0.003 m, rover Perseverance)
+PASS  context ring meets the patch at the seam  (largest step 0.0000 m)
+NOTE  no imagery for this site: imagery: MSL Gale merged orthophoto mosaic, HiRISE (USGS): the file is not in data/raw yet; MSL Gale HiRISE colour mosaic, cloud-optimized (USGS): the data host
+
+== demo grounds
+PASS  every demo ground is flagged synthetic  (145 patches)
+
+== imagery alignment
+NOTE  no site has imagery yet, so there is nothing to align. The alignment method is exercised on synthetic rasters by pipeline/test_fetch_windows.py.
+
+all passed

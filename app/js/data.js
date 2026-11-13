@@ -5,23 +5,27 @@ const BASE = ROOT + 'data/processed/';
 export const D = { meta: null, targets: [], hotspots: {}, expl: {}, manifest: null, scores: null, zq: null, patchIdx: null, patchBuf: null, rovers: null, land: null };
 
 async function j(url) {
-  const r = await fetch(url);
+  const r = await fetch(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.json();
 }
 async function b(url) {
-  const r = await fetch(url);
+  const r = await fetch(url, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.arrayBuffer();
 }
+
+let patchP = null;
+/** Terrain patches are fetched the first time Site View is wanted (main.js starts it when a hotspot is clicked, so it loads during the fly-in). */
+export function ensurePatches() { if (D.patchBuf) return Promise.resolve(); return patchP || (patchP = b(BASE + 'patches.bin').then(buf => { D.patchBuf = buf; }, e => { patchP = null; throw e; })); }
 
 export async function loadAll(onStatus = () => {}) {
   onStatus('Loading data');
   const [meta, targets, hotspots, expl, manifest, rovers, patchIdx] = await Promise.all([
     j(BASE + 'earth_meta.json'), j(BASE + 'targets.json'), j(BASE + 'hotspots.json'), j(BASE + 'explanations.json'),
-    j(BASE + 'manifest.json'), j(ROOT + 'assets/models/rover_params.json'), j(BASE + 'patches_index.json')]);
-  const [scores, traits, patchBuf] = await Promise.all([b(BASE + 'scores.bin'), b(BASE + 'earth_traits.bin'), b(BASE + 'patches.bin')]);
-  Object.assign(D, { meta, targets, hotspots, expl: expl.entries, explSource: expl.source, manifest, rovers, patchIdx, patchBuf });
+    j(BASE + 'manifest.json'), j(ROOT + 'assets/models/rovers.json').catch(e => { console.error(e); return null; }), j(BASE + 'patches_index.json')]);
+  const [scores, traits] = await Promise.all([b(BASE + 'scores.bin'), b(BASE + 'earth_traits.bin')]);   // patches.bin (4.9 MB) is only needed by Site View: see ensurePatches
+  Object.assign(D, { meta, targets, hotspots, expl: expl.entries, explSource: expl.source, manifest, rovers, patchIdx });
   D.N = meta.nlat * meta.nlon;
   D.scores = new Uint8Array(scores);
   D.zq = new Int8Array(traits);

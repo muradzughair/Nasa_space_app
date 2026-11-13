@@ -1,8 +1,9 @@
 // Drive-mode physics: a dynamic, gravity-aware rover on a terrain patch. Pure logic, no 3D, deterministic for the same inputs.
-// A screening model, not validated against a real rover. All drive-force, power and battery figures come from rover_params.json and are
-// flagged verified:false there. Terrain contact (wheel points, plane fit), friction and rolling resistance come from sim.js so both stay in step.
+// A screening model, not validated against a real rover. All drive-force, power and battery figures come from the effective rover config (rovercfg.js, built from
+// assets/models/rovers.json) and are flagged verified:false there when they are assumptions. Terrain contact (wheel points, plane fit), friction and rolling resistance come from sim.js so both stay in step.
 import { sampleGrid, upsample } from './terrain.js';
 import { wheelPoints, contactFit, crrFromSoil, START } from './sim.js';
+import { SoilDrag } from './soilmech.js';
 
 export const STEP = 1 / 120;                 // fixed physics step, simulated seconds
 export const DEMO_SCALES = [1, 5, 10, 25];   // demo speed scale: multiplies simulated time per real second, never the forces
@@ -12,10 +13,11 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const sgn = x => (x > 0 ? 1 : x < 0 ? -1 : 0);
 
 export class DriveSim {
-  /** patch: terrain patch; par: rover params; g: local gravity; mu: friction coefficient; soil: 0..1; mass: kg. */
-  constructor(patch, par, { g, mu, soil, mass }) {
+  /** patch: terrain patch; par: effective rover config (rovercfg.js); g: local gravity; mu: friction coefficient; soil: 0..1; mass: kg;
+   *  S: Bekker soil constants of the ground class (optional, adds sinkage and compaction resistance). */
+  constructor(patch, par, { g, mu, soil, mass, S }) {
     this.p = patch; this.par = par; this.W = wheelPoints(par); this.U = upsample(patch);
-    this.g = g; this.mu = mu; this.crr = crrFromSoil(soil); this.m = mass ?? par.mass_kg;
+    this.g = g; this.mu = mu; this.crr = crrFromSoil(soil); this.m = mass ?? par.mass_kg; this.drag = S ? new SoilDrag(par, S) : null;
     this.sample = (x, z) => sampleGrid(this.U.h, this.U.M, this.U.dx, x, z);
     this.reset();
   }
@@ -36,7 +38,7 @@ export class DriveSim {
     const { par, m, g, mu, crr } = this, W = this.W;
     const f = contactFit(this.sample, this.x, this.z, this.psi, W); this.fit = f;
     const sa = f.sa, sb = f.sb, alpha = Math.atan(Math.hypot(sa, sb)), cosA = Math.cos(alpha);
-    const N = m * g * cosA, muN = mu * N, Fres = crr * N;                    // wheel normal load, traction limit, rolling resistance (newtons)
+    const N = m * g * cosA, muN = mu * N, Fres = crr * N + (this.drag ? this.drag.at(N).Rc : 0);                    // wheel normal load, traction limit, rolling resistance (newtons)
     const Fg = -m * g * (sa / Math.hypot(1, sa)), Fgr = -m * g * (sb / Math.hypot(1, sb));   // gravity components along the heading and to the right
     const vmax = par.max_speed_mps;
     const d = this.dead ? 0 : clamp(inp.throttle, -1, 1), hb = clamp(inp.brake || 0, 0, 1), v = this.v;
@@ -104,7 +106,7 @@ export class DriveSim {
     const dsum = this.bins.length + this.binS, epm = dsum >= 0.25 ? (this.bins.reduce((a, b) => a + b, 0) + this.binE) / dsum : null;   // J/m over the last ~20 m (bins of 1 m), drive energy only
     const bearing = ((Math.atan2(fx, -fz) / DEG) + 360) % 360;
     return { speed: this.v, lat: this.u, ground: Math.hypot(this.v, this.u), bearing, pitch: Math.atan(f.sa) / DEG, roll: Math.atan(f.sb) / DEG, tilt: alpha / DEG, slopeAhead,
-      dist: this.dist, simT: this.simT, power: this.P, energyWh: this.E / 3600, epm, battery: this.battery, slip: Math.max(this.spin, baseSlip), spin: this.spin, sliding: this.sliding,
+      dist: this.dist, simT: this.simT, power: this.P, energyWh: this.E / 3600, epm, battery: this.battery, slip: Math.max(this.spin, baseSlip), spin: this.spin, sliding: this.sliding, sinkMm: this.drag ? 1000 * this.drag.z : 0, pressKPa: this.drag ? this.drag.p / 1000 : 0,
       N: this.N, muN: this.muN, mu: this.mu, g: this.g, mass: this.m, edge: this.edge, dead: this.dead, accel: this.aLong, tiltLimit: par.slope_limit_deg, resid: this.lastRes, yawRate: this.om / DEG };
   }
 }

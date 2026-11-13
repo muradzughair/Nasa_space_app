@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>Rover model check</title>
+<style>body{margin:0;background:#101418}canvas{display:block}</style>
+<script type="module">
+import * as THREE from '../app/vendor/three-bundle.js';
+const ids = (new URLSearchParams(location.search).get('ids') || 'curiosity,perseverance,lunar_generic').split(',');
+const PV = new URLSearchParams(location.search).get('preview'), W = PV ? 640 : 1600, Hh = PV ? 400 : 700;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, Hh); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x30363d);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.4)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(4, 8, 5); scene.add(d);
+if (!PV) scene.add(new THREE.GridHelper(40, 40)); else scene.background = new THREE.Color(0x1b2332);
+const L = new THREE.GLTFLoader(); L.setMeshoptDecoder(THREE.MeshoptDecoder);
+window.models = {};
+for (let i = 0; i < ids.length; i++) {
+  const g = await L.loadAsync(`../assets/models/${ids[i]}.glb`); g.scene.position.x = PV ? 0 : (i - (ids.length - 1) / 2) * 5.2; g.scene.rotation.y = 0.55; scene.add(g.scene); window.models[ids[i]] = g.scene;
+  const wn = []; g.scene.traverse(o => { if (/^wheel_\d\d_[LR]$/.test(o.name)) wn.push(o.name); }); console.log(ids[i], 'wheel nodes', wn.join(','));
+}
+const cam = new THREE.PerspectiveCamera(35, W / Hh, 0.1, 100); PV ? cam.position.set(0, 2.4, 6.0) : cam.position.set(0, 5.5, 13); cam.lookAt(0, 0.8, 0);
+r.render(scene, cam); window.ready = true; window.render = () => r.render(scene, cam); window.THREE = THREE;
+</script>

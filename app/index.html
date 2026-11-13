@@ -85,6 +85,7 @@
     <div id="siteTitle" class="site-title"></div>
     <div id="siteBadges"></div>
   </div>
+  <div id="siteNote" class="site-note hidden" role="alert"></div>
   <div class="site-body">
     <div class="vp-wrap" id="vpWrap">
       <div class="vp-stage" id="vpStage">
@@ -148,6 +149,7 @@
       </section>
       <section id="simSec">
         <h3>Rover simulation</h3>
+        <div id="roverBar" class="rover-bar"></div>
         <p class="hint" id="simIntro"></p>
         <div class="sim-inputs" id="simInputs"></div>
         <div id="simStatus" class="hint"></div>
@@ -167,6 +169,7 @@
     <button id="dcClose" class="btn ghost close" aria-label="Close">Close</button>
     <h1 id="dcTitle">Drive a rover</h1>
     <p class="hint">Choose one ground. It opens full screen and you drive freely: no goal, no score. A small comparison view shows the same inputs on the other ground.</p>
+    <div id="dcRover" class="dc-rover"></div>
     <div class="dc-cards" id="dcCards"></div>
     <p class="hint dc-note">Controller: connect a PlayStation 5 DualSense (or any standard gamepad) by USB-C or Bluetooth, then press a button. Keyboard also works (W A S D, Space to brake).</p>
   </div>
@@ -179,6 +182,25 @@
   </div>
 </div>
 
-<script type="module" src="js/main.js"></script>
+<!-- Build id 20261113b: every module URL gets ?v= so a browser can never mix cached old modules with new ones. Change the id in this map and in the main.js line below when releasing. -->
+<script type="importmap">{"imports": {
+    "./js/contact.js": "./js/contact.js?v=20261113b",
+    "./js/data.js": "./js/data.js?v=20261113b",
+    "./js/drive.js": "./js/drive.js?v=20261113b",
+    "./js/drivemode.js": "./js/drivemode.js?v=20261113b",
+    "./js/fallback.js": "./js/fallback.js?v=20261113b",
+    "./js/globeview.js": "./js/globeview.js?v=20261113b",
+    "./js/ground.js": "./js/ground.js?v=20261113b",
+    "./js/input.js": "./js/input.js?v=20261113b",
+    "./js/rovercfg.js": "./js/rovercfg.js?v=20261113b",
+    "./js/rovers.js": "./js/rovers.js?v=20261113b",
+    "./js/roverui.js": "./js/roverui.js?v=20261113b",
+    "./js/sim.js": "./js/sim.js?v=20261113b",
+    "./js/site.js": "./js/site.js?v=20261113b",
+    "./js/soilmech.js": "./js/soilmech.js?v=20261113b",
+    "./js/terrain.js": "./js/terrain.js?v=20261113b",
+    "./vendor/three-bundle.js": "./vendor/three-bundle.js?v=20261113b"
+}}</script>
+<script type="module" src="js/main.js?v=20261113b"></script>
 </body>
 </html>

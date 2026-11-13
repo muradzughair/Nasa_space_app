@@ -1,5 +1,5 @@
 // Home screen: target and purpose pickers, globe heat map, ranked hotspot list, About panel.
-import { D, ROOT, loadAll, presetGrid, liveScore, weightsVec, pickHotspots, targetById, fmtTrait } from './data.js';
+import { D, ROOT, loadAll, ensurePatches, presetGrid, liveScore, weightsVec, pickHotspots, targetById, fmtTrait } from './data.js';
 import { createGlobe, motion } from './globeview.js';
 
 const S = { target: null, purpose: 'rover', custom: null, hotspots: [] };
@@ -104,16 +104,21 @@ async function openHotspot(h) {
   $('firstRun').classList.add('gone');
   const target = targetById(S.target);
   savedView = G.getView(); G.select(h.id); veilShow(h, target);
+  ensurePatches().catch(() => {});   // starts the terrain download now so it overlaps the globe fly-in; openSite awaits it and reports a failure
+  import('./terrain.js').then(m => m.prepareReal([target.patch, h.id])).catch(() => {});   // same for the real terrain tiles of the two grounds (local files); openSite awaits them and reports a failure
   $('veilBox').classList.remove('busy');
   // 1. fly the globe camera to the hotspot (ease in/out), fading the veil in over the last part
   siteMod = siteMod || import('./site.js');
+  siteMod.then(mod => mod.prewarm && mod.prewarm()).catch(() => {});
   await G.flyTo({ lat: h.lat, lon: h.lon, dist: 1.16 }, 1200, f => veilOpacity(Math.max(0, (f - 0.5) / 0.5) * 0.96));
   // 2. build the terrain behind the veil, showing the loading indicator
   veilOpacity(1); $('veilBox').classList.add('busy'); await raf2();
   const { openSite } = await siteMod;
+  performance.mark('site-open-start');
   try {
     await openSite({ target, purpose: S.purpose, hotspot: h, onBack: backToGlobe });
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error(e); const n = $('siteNote'); if (n) { n.textContent = `Could not open Site View: ${e && e.message ? e.message : e}`; n.classList.remove('hidden'); } }   // never a silent black view
+  performance.mark('site-open-end');
   G.stop();
   $('home').classList.add('hidden'); $('site').classList.remove('hidden');
   await raf2();
@@ -148,6 +153,19 @@ function wireLayers() {
   $('resetGlobe').onclick = () => G.resetView();
 }
 
+/** Site View ground, one row per target plus one for the Earth hotspots, from the provenance fields the pipeline wrote (patches_index.json). */
+function groundRows(row) {
+  const P = D.patchIdx.patches, res = m => (m >= 1 ? `${+m.toFixed(1)} m` : `${Math.round(m * 100)} cm`), short = m => m.replace(/https?:\/\/\S+/g, 'the source file').slice(0, 150);
+  const one = (name, e) => {
+    if (!e || !e.real) return row(`Site View ground: ${name}`, 'demo', 'demo', 'Synthetic stand-in terrain (slope statistics from the traits), labelled demo in Site View.' + (e && e.missing && e.missing.length ? ' Real data was tried and is missing: ' + short(e.missing[0]) : ' Real data not fetched yet: run pipeline/fetch_windows.py.'));
+    const img = e.real.img ? `Imagery: ${e.imagery_source}, ${res(e.imagery_resolution_m)} (real${e.real.img.gray ? ', greyscale, tint added' : ''}).` : 'Imagery: none yet (generic ground texture).';
+    return row(`Site View ground: ${name}`, e.real.img && !e.synthetic_fine ? 'real' : 'real, partial', e.real.img && !e.synthetic_fine ? 'real' : 'sup', `Elevation: ${e.elevation_source}, ${res(e.elevation_resolution_m)} (real). ${img}${e.synthetic_fine ? ' Fine detail synthetic.' : ''} Centre ${e.site_center[0].toFixed(4)}, ${e.site_center[1].toFixed(4)}, built ${e.date_built}.`);
+  };
+  const earth = Object.entries(P).filter(([k]) => k.startsWith('E')), er = earth.filter(([, e]) => e.real);
+  return D.targets.map(t => one(t.short, P[t.patch])).join('') + row('Site View ground: Earth hotspots', er.length ? `${er.length} of ${earth.length} real` : 'demo', er.length === earth.length ? 'real' : 'demo',
+    (er.length ? `${er.length} hotspot windows use ${er[0][1].elevation_source} (30 m) with ${er[0][1].imagery_source}; fine detail below about 60 m is synthetic and labelled. ` : 'Copernicus GLO-30 elevation and Sentinel-2 cloudless imagery are set up in pipeline/fetch_windows.py but were not fetched (data hosts not reachable from the build environment). ') + (er.length < earth.length ? `${earth.length - er.length} hotspot grounds are synthetic stand-ins, labelled demo.` : '')) +
+    row('Rocks and close-up ground grain', 'illustrative', 'sup', 'Rocks follow a rock-abundance rule with a fixed seed; the close-up grain is a generic photo texture (Poly Haven, CC0). Neither is measured data, and the wheels do not feel the rocks');
+}
 function renderAbout() {
   const m = D.manifest, demo = m.demo;
   const row = (name, status, kind, note) => `<tr><td>${name}</td><td><span class="pill ${kind}">${status}</span></td><td>${note}</td></tr>`;
@@ -160,17 +178,18 @@ function renderAbout() {
   ${row('Moon LOLA LDEM_16, LDSM_16, LDRM_16', m.real_files_found.moon ? 'real' : 'not used', m.real_files_found.moon ? 'real' : 'demo', 'imbrium.mit.edu LOLA GDR cylindrical grids, 16 pixels per degree')}
   ${row('Mars MOLA MEGDR megt90n000eb', m.real_files_found.mars ? 'real' : 'not used', m.real_files_found.mars ? 'real' : 'demo', 'PDS Geosciences Node, 16 pixels per degree. Only the label file was supplied')}
   ${row('Earth ETOPO 2022 (60 arc-second)', m.real_files_found.earth ? 'real' : 'not used', m.real_files_found.earth ? 'real' : 'demo', 'NOAA NCEI global relief model')}
-  ${row('Earth hotspot windows (Copernicus GLO-30)', 'not used', 'demo', 'Terrain patches here are synthetic stand-ins with slope statistics taken from the traits; fine roughness is always synthetic')}
+  ${groundRows(row)}
   ${row('Temperature, soil and dust traits', 'placeholder', 'demo', 'Stand-ins for MODIS / Diviner / THEMIS and geologic maps; lower default weights')}
   ${row('Earth land mask', 'real', 'real', 'PyPI global-land-mask (GLOBE-derived). Shape only, no elevation')}
-  ${row('Perseverance rover model', 'supplied', 'sup', 'NASA/JPL-Caltech, compressed for the web')}
-  ${row('Lunar rover model', 'procedural', 'sup', 'Built in Three.js for this app; not a NASA model')}
+  ${row('Perseverance and Curiosity rover models', 'supplied', 'sup', 'NASA 3D Resources, converted and compressed for the web. Scarecrow reuses the Curiosity model')}
+  ${row('Generic lunar rover model', 'procedural', 'sup', 'Built for this app from primitives; not a NASA model, not the Apollo LRV or VIPER')}
+  ${row('Rover figures and soil constants', 'mixed', 'sup', 'Each figure is sourced or tagged assumed (assets/models/rovers.json). Soil constants are assumed and simplified')}
   </table>
   <p class="hint">Dataset names, formats and licences have not yet been verified against the challenge Resources tab. Generated: ${m.generated}. Explanations: ${D.explSource}.</p>
   <h4>How it works</h4>
   <p>Every place is described by nine traits (relief, median and steep slope, roughness, mean temperature and range, soil competence, dust cover, sun elevation). Traits are compared on one common scale, z-scored, weighted by purpose and turned into a 0 to 100 score. Hotspots are peaks at least 7 degrees apart. Language models, if used, only phrase the computed numbers and never produce rankings.</p>
   <h4>Limits</h4>
-  <p>The rover simulation is a screening comparison with simplified soil behaviour and is not validated against a real rover. Gravity changes some metrics (wheel load, energy per metre, sinkage) and not others (the slope limit set by friction), so the verdict reports which metrics match and which do not. Rover mass, speed and efficiency values are marked as unverified in assets/models/rover_params.json.</p>
+  <p>The rover simulation is a screening comparison with simplified soil behaviour and is not validated against a real rover. Gravity changes some metrics (wheel load, energy per metre, sinkage) and not others (the slope limit set by friction), so the verdict reports which metrics match and which do not. Rover figures that could not be checked against a source are tagged assumed (assets/models/rovers.json); the soil constants are assumed and simplified.</p>
   <h4>Libraries</h4><p class="hint">Three.js (MIT), meshopt decoder (MIT), Inter typeface (SIL OFL). Earth imagery, topography and water mask, country outlines and ground textures are local files (see README).</p>`;
 }
 
