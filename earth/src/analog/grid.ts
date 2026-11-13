@@ -1,13 +1,13 @@
 /**
  * The global grid built by scripts/build-grid.mjs: every land cell of a 0.5°
- * grid with the same measurements as the curated sites. Loaded on the first
- * click or when the heatmap is switched on; scored here with the shared
- * scoring module, so a cell and a curated site are compared identically.
+ * grid with the measurements the similarity model needs. Loaded the first
+ * time a spot is scored. Nothing is scored here: this file only looks up what
+ * is known about a place, for scoring.ts to compare.
  */
 import { DATA_URL } from "../config";
 import { haversine } from "../geo/coords";
-import type { AtlasData, Site, Source, Target, Weights } from "./data";
-import { compare, compareScores, type DimId, type DimScore, type EarthMeasures, sunElevation, type TargetMeasures } from "./scoring";
+import type { AtlasData, Site, Source } from "./data";
+import type { EarthMeasures } from "./scoring";
 
 interface Field {
   id: string;
@@ -16,13 +16,6 @@ interface Field {
   src: string;
   /** Source used instead where bit 0 of the cell's flags is set. */
   altSrc?: string;
-}
-
-interface Lithology {
-  id: string;
-  label: string;
-  /** Null: the class says nothing about bedrock. */
-  tags: Record<string, number> | null;
 }
 
 interface Header {
@@ -37,9 +30,12 @@ interface Header {
   /** False when the grid was built without the MODIS products. */
   modis: boolean;
   year: number;
-  /** The geology terms a lithology map can resolve. */
-  vocabulary: string[];
-  lithology: Lithology[];
+  /** GLiM rock classes, by the code stored in the lithology column. */
+  lithology: { id: string; label: string }[];
+  /** Impact structures: name, latitude, longitude, diameter in km. */
+  impacts: [string, number, number, number][];
+  /** Holocene volcanoes: name, latitude, longitude, 1 if basaltic, type. */
+  volcanoes: [string, number, number, number, string][];
   sources: Record<string, Source>;
 }
 
@@ -59,13 +55,20 @@ export interface Cell {
   lat: number;
   lon: number;
   measures: EarthMeasures;
-  pressure: number;
   elevation: number;
-  lithology: Lithology | null;
   /** Temperatures are MERRA-2 skin temperature because MODIS has no value here. */
   modelledTemperature: boolean;
   /** Source key of each measured quantity, into Grid.header.sources. */
   sources: string[];
+}
+
+/** The mapped features near a point, with their names for the card. */
+export interface Features {
+  impact: number | null;
+  impactName: string | null;
+  volcano: number | null;
+  volcanoName: string | null;
+  volcanoBasaltic: boolean;
 }
 
 let request: Promise<Grid> | null = null;
@@ -89,6 +92,7 @@ function parse(buffer: ArrayBuffer): Grid {
   if (new TextDecoder().decode(new Uint8Array(buffer, 0, 4)) !== "AGRD") throw new Error("grid.bin: not a grid file");
   const headerLength = view.getUint32(4, true);
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 8, headerLength))) as Header;
+  if (header.version !== 2) throw new Error("grid.bin: built for another version of the scoring; run npm run grid");
   let offset = 8 + headerLength;
   const cells = new Uint32Array(buffer.slice(offset, offset + header.count * 4));
   offset += header.count * 4;
@@ -103,40 +107,64 @@ function parse(buffer: ArrayBuffer): Grid {
   return { header, lookup, cells, columns, scales };
 }
 
-function measuresAt(grid: Grid, i: number, lat: number): { measures: EarthMeasures; lithology: Lithology | null } {
+/** The measurements of stored cell `i`, with features as measured from the cell centre. */
+function measuresAt(grid: Grid, i: number, lat: number): EarthMeasures {
   const { header, columns, scales } = grid;
   const value = (id: string): number | null => {
     const raw = columns[id][i];
     return raw === header.nodata ? null : raw / scales[id];
   };
   const code = value("lithology");
-  const lithology = code == null ? null : header.lithology[code];
+  const volcanoId = value("volcanoId");
   return {
-    lithology,
-    measures: {
-      slope: value("slope")!,
-      roughness: value("roughness")!,
-      relief: value("relief")!,
-      tmean: value("tmean")!,
-      tmax: value("tmax")!,
-      precipitation: value("precipitation")!,
-      vapour: value("vapour")!,
-      aod: value("aod")!,
-      windPressure: value("windPressure")!,
-      ndvi: value("ndvi"),
-      sun: sunElevation(lat, 23.44),
-      // No global ground-ice source: the water score uses dryness and vapour only.
-      ice: null,
-      // Rock type is shown on the card but not scored: a lithology map resolves too little of the vocabulary.
-      tags: null,
-    },
+    lat,
+    slope: value("slope"),
+    roughness: value("roughness"),
+    relief: value("relief"),
+    tmean: value("tmean")!,
+    swing: value("swing"),
+    airT: value("airT"),
+    precipitation: value("precipitation")!,
+    vapour: value("vapour")!,
+    soilWetness: value("soilWetness"),
+    ndvi: value("ndvi"),
+    pressure: value("pressure"),
+    uv: value("uv"),
+    cloud: value("cloud"),
+    albedo: value("albedo"),
+    lithology: code == null ? null : header.lithology[code].id,
+    tags: null,
+    ice: null,
+    impact: value("impact"),
+    volcano: value("volcano"),
+    volcanoBasaltic: volcanoId != null && header.volcanoes[volcanoId][3] === 1,
   };
 }
 
 const rowLat = (grid: Grid, row: number) => 90 - (row + 0.5) * grid.header.cellDegrees;
 
-/** The land cell containing a point, or null over the sea. */
-export function cellAt(grid: Grid, lat: number, lon: number): Cell | null {
+/** Impact structures and volcanoes near an exact point (not the cell centre): the nearest of each within 60 km. */
+export function featuresAt(grid: Grid, lat: number, lon: number): Features {
+  const out: Features = { impact: null, impactName: null, volcano: null, volcanoName: null, volcanoBasaltic: false };
+  for (const [name, fLat, fLon, diameter] of grid.header.impacts) {
+    if (Math.abs(fLat - lat) > 1.5) continue;
+    const km = Math.max(0, haversine(lat, lon, fLat, fLon) / 1000 - diameter / 2);
+    if (km <= 60 && (out.impact == null || km < out.impact)) Object.assign(out, { impact: km, impactName: name });
+  }
+  for (const [name, fLat, fLon, basaltic] of grid.header.volcanoes) {
+    if (Math.abs(fLat - lat) > 1) continue;
+    const km = haversine(lat, lon, fLat, fLon) / 1000;
+    if (km <= 60 && (out.volcano == null || km < out.volcano)) Object.assign(out, { volcano: km, volcanoName: name, volcanoBasaltic: basaltic === 1 });
+  }
+  return out;
+}
+
+/**
+ * The land cell containing a point, or null over the sea. Climate, terrain
+ * and rock type are the cell's; impact structures and volcanoes are measured
+ * from the point itself.
+ */
+export function cellAt(grid: Grid, lat: number, lon: number): (Cell & { features: Features }) | null {
   const { header, lookup, columns } = grid;
   const row = Math.min(header.rows - 1, Math.max(0, Math.floor((90 - lat) / header.cellDegrees)));
   const col = ((Math.floor((lon + 180) / header.cellDegrees) % header.cols) + header.cols) % header.cols;
@@ -144,40 +172,55 @@ export function cellAt(grid: Grid, lat: number, lon: number): Cell | null {
   if (i < 0) return null;
   const centreLat = rowLat(grid, row);
   const modelledTemperature = (columns.flags[i] & 1) === 1;
-  const sources = new Set<string>(["geometry"]);
+  const sources = new Set<string>();
   for (const f of header.fields) {
     if (!f.src || columns[f.id][i] === header.nodata) continue;
     sources.add(modelledTemperature && f.altSrc ? f.altSrc : f.src);
   }
+  const features = featuresAt(grid, lat, lon);
   return {
     lat: centreLat,
     lon: -180 + (col + 0.5) * header.cellDegrees,
-    ...measuresAt(grid, i, centreLat),
-    pressure: columns.pressure[i] / grid.scales.pressure,
+    measures: { ...measuresAt(grid, i, lat), impact: features.impact, volcano: features.volcano, volcanoBasaltic: features.volcanoBasaltic },
+    features,
     elevation: columns.elevation[i],
     modelledTemperature,
     sources: [...sources],
   };
 }
 
-export const targetMeasures = (target: Target): TargetMeasures => ({
-  slope: target.m.slope.v,
-  roughness: target.m.roughness.v,
-  relief: target.m.relief.v,
-  tmean: target.m.tmean.v,
-  tmax: target.m.tmax.v,
-  vapour: target.m.vapour.v,
-  aod: target.m.aod.v,
-  windPressure: target.m.windPressure.v,
-  sun: target.m.sun.v,
-  ice: target.ice,
-  tags: target.tags,
-  subsurface: target.subsurface,
-});
-
-/** Similarities between a grid cell and a target, on the same scales as the curated sites (geology is never scored for a cell). */
-export const compareCell = (data: AtlasData, cell: Cell, target: Target): Record<DimId, DimScore> =>
-  compare(cell.measures, targetMeasures(target), data.tags);
+/**
+ * A curated site: its own finer measurements and published materials over
+ * the grid cell it sits in. Two island sites have no cell; what the cell
+ * would have supplied is then missing and left out of their score.
+ */
+export function siteMeasures(grid: Grid, site: Site): { measures: EarthMeasures; features: Features } {
+  const cell = cellAt(grid, site.lat, site.lon);
+  const features = cell?.features ?? featuresAt(grid, site.lat, site.lon);
+  const base: EarthMeasures = cell?.measures ?? {
+    lat: site.lat, slope: null, roughness: null, relief: null, tmean: site.m.tmean.v, swing: null, airT: null,
+    precipitation: site.m.precipitation.v, vapour: site.m.vapour.v, soilWetness: null, ndvi: null, pressure: null,
+    uv: null, cloud: null, albedo: null, lithology: null, tags: null, ice: null,
+    impact: features.impact, volcano: features.volcano, volcanoBasaltic: features.volcanoBasaltic,
+  };
+  return {
+    features,
+    measures: {
+      ...base,
+      lat: site.lat,
+      slope: site.m.slope.v,
+      roughness: site.m.roughness.v,
+      relief: site.m.relief.v,
+      tmean: site.m.tmean.v,
+      precipitation: site.m.precipitation.v,
+      vapour: site.m.vapour.v,
+      ndvi: site.m.ndvi.v,
+      pressure: site.m.pressure.v,
+      tags: site.tags,
+      ice: site.ice,
+    },
+  };
+}
 
 /** The curated site nearest to a point, if one lies within `reach` metres. */
 export function nearbySite(data: AtlasData, lat: number, lon: number, reach = 50_000): { site: Site; distance: number } | null {
@@ -187,175 +230,4 @@ export function nearbySite(data: AtlasData, lat: number, lon: number, reach = 50
     if (distance <= reach && (!best || distance < best.distance)) best = { site, distance };
   }
   return best;
-}
-
-// ------------------------------------------------------------------ heatmap
-
-/** The heatmap's colour scale covers this range of overall similarity; values beyond it take the end colours. */
-export const HEAT_RANGE: [number, number] = [0.2, 0.7];
-
-/**
- * Dark violet to pale yellow, rising in lightness all the way so the order
- * reads without the legend and survives colour-blindness (the viridis
- * family). Pairs are [position, r, g, b].
- */
-const HEAT_STOPS: [number, number, number, number][] = [
-  [0, 68, 1, 84],
-  [0.25, 59, 82, 139],
-  [0.5, 33, 145, 140],
-  [0.75, 94, 201, 98],
-  [1, 253, 231, 37],
-];
-
-export function heatColor(score: number): [number, number, number] {
-  const t = Math.min(1, Math.max(0, (score - HEAT_RANGE[0]) / (HEAT_RANGE[1] - HEAT_RANGE[0])));
-  let k = 1;
-  while (k < HEAT_STOPS.length - 1 && HEAT_STOPS[k][0] < t) k++;
-  const a = HEAT_STOPS[k - 1], b = HEAT_STOPS[k];
-  const f = (t - a[0]) / (b[0] - a[0]);
-  return [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f];
-}
-
-export const heatGradient = () =>
-  `linear-gradient(to right, ${HEAT_STOPS.map(([p, r, g, b]) => `rgb(${r} ${g} ${b}) ${p * 100}%`).join(", ")})`;
-
-export interface Heatmap {
-  /** One pixel per grid cell, north at the top; the sea is transparent. */
-  canvas: HTMLCanvasElement;
-  /** Highest overall similarity of any cell, and where. */
-  best: { score: number; lat: number; lon: number };
-  /** The target this map compares with. */
-  target: Target;
-}
-
-const DIMS: DimId[] = ["terrain", "thermal", "water", "geology", "dustwind", "biology", "illumination"];
-const scoreCache = new WeakMap<Grid, Map<string, Promise<Float32Array>>>();
-
-/**
- * The seven similarities of every cell to one target (NaN where a cell has
- * no data for a dimension). Worked out once per target; changing the mission
- * goal only re-weights them.
- */
-function targetScores(grid: Grid, data: AtlasData, target: Target): Promise<Float32Array> {
-  let byTarget = scoreCache.get(grid);
-  if (!byTarget) scoreCache.set(grid, (byTarget = new Map()));
-  let scores = byTarget.get(target.id);
-  if (!scores) byTarget.set(target.id, (scores = scoreInWorker(grid, data, target)));
-  return scores;
-}
-
-/** Scores every cell against one target; runs in cellScores.worker.ts. */
-export function cellScores(grid: Grid, tags: Record<string, string>, target: TargetMeasures): Float32Array {
-  const { header, cells } = grid;
-  const vocabulary = Object.keys(tags);
-  const scores = new Float32Array(cells.length * DIMS.length);
-  for (let i = 0; i < cells.length; i++) {
-    const lat = rowLat(grid, Math.floor(cells[i] / header.cols));
-    const result = compareScores(measuresAt(grid, i, lat).measures, target, vocabulary);
-    for (let d = 0; d < DIMS.length; d++) scores[i * DIMS.length + d] = result[DIMS[d]] ?? NaN;
-  }
-  if (import.meta.env.DEV) checkAgainstCompare(grid, tags, target, scores);
-  return scores;
-}
-
-/** Development guard: compareScores() must agree with compare() exactly (every 97th cell). */
-function checkAgainstCompare(grid: Grid, tags: Record<string, string>, target: TargetMeasures, scores: Float32Array): void {
-  for (let i = 0; i < grid.cells.length; i += 97) {
-    const lat = rowLat(grid, Math.floor(grid.cells[i] / grid.header.cols));
-    const full = compare(measuresAt(grid, i, lat).measures, target, tags);
-    for (let d = 0; d < DIMS.length; d++) {
-      const expected = Math.fround(full[DIMS[d]].score ?? NaN);
-      const actual = scores[i * DIMS.length + d];
-      if (!Object.is(expected, actual)) {
-        console.error(`compareScores() disagrees with compare() at cell ${i}, ${DIMS[d]}: ${actual} vs ${expected}`);
-        return;
-      }
-    }
-  }
-}
-
-let worker: Worker | null = null;
-/** The grid the worker holds a copy of. */
-let workerGrid: Grid | null = null;
-let nextRequest = 0;
-const requests = new Map<number, { resolve: (scores: Float32Array) => void; reject: (error: unknown) => void }>();
-
-/**
- * Scoring all 92,172 cells takes a few hundred milliseconds, long enough to
- * freeze the page, so it runs in a worker. The grid is copied to the worker
- * once; each request sends the target and gets the scores back transferred.
- * If the worker cannot run, the scores are computed here instead.
- */
-function scoreInWorker(grid: Grid, data: AtlasData, target: Target): Promise<Float32Array> {
-  const tm = targetMeasures(target);
-  try {
-    if (!worker) {
-      worker = new Worker(new URL("./cellScores.worker.ts", import.meta.url), { type: "module" });
-      worker.onmessage = (event: MessageEvent<CellScoresResponse>) => {
-        requests.get(event.data.id)?.resolve(event.data.scores);
-        requests.delete(event.data.id);
-      };
-      worker.onerror = (event) => {
-        for (const r of requests.values()) r.reject(event);
-        requests.clear();
-        worker = null;
-        workerGrid = null;
-      };
-    }
-    const id = ++nextRequest;
-    const message: CellScoresRequest = { id, target: tm, tags: data.tags };
-    if (workerGrid !== grid) {
-      message.grid = grid;
-      workerGrid = grid;
-    }
-    const pending = new Promise<Float32Array>((resolve, reject) => requests.set(id, { resolve, reject }));
-    worker.postMessage(message);
-    return pending.catch(() => cellScores(grid, data.tags, tm));
-  } catch {
-    return Promise.resolve(cellScores(grid, data.tags, tm));
-  }
-}
-
-export interface CellScoresRequest {
-  id: number;
-  /** Sent with the first request only. */
-  grid?: Grid;
-  target: TargetMeasures;
-  tags: Record<string, string>;
-}
-
-export interface CellScoresResponse {
-  id: number;
-  scores: Float32Array;
-}
-
-/** Overall similarity of every land cell to one target, under one set of weights, as a picture. */
-export async function renderHeatmap(grid: Grid, data: AtlasData, target: Target, weights: Weights): Promise<Heatmap> {
-  const scores = await targetScores(grid, data, target);
-  const { header, cells } = grid;
-  const canvas = document.createElement("canvas");
-  canvas.width = header.cols;
-  canvas.height = header.rows;
-  const context = canvas.getContext("2d")!;
-  const image = context.createImageData(header.cols, header.rows);
-  const best = { score: -1, lat: 0, lon: 0 };
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    let sum = 0;
-    let total = 0;
-    for (let d = 0; d < DIMS.length; d++) {
-      const s = scores[i * DIMS.length + d];
-      if (Number.isNaN(s)) continue; // no data: left out with its weight, as in overall()
-      sum += weights[DIMS[d]] * s;
-      total += weights[DIMS[d]];
-    }
-    const score = total ? sum / total : 0;
-    if (score > best.score) {
-      Object.assign(best, { score, lat: rowLat(grid, Math.floor(cell / header.cols)), lon: -180 + ((cell % header.cols) + 0.5) * header.cellDegrees });
-    }
-    const [r, g, b] = heatColor(score);
-    image.data.set([r, g, b, 255], cell * 4);
-  }
-  context.putImageData(image, 0, 0);
-  return { canvas, best, target };
 }

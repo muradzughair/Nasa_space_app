@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { Body } from "../analog/scoring";
 import type { PlanetId } from "../globe/planets";
 
 export type ImageryId =
@@ -49,14 +50,14 @@ export interface Arrival {
 
 export interface AtlasState {
   open: boolean;
-  targetId: string;
+  /** The body Earth is being compared with. */
+  body: Body;
+  /** The chosen version (profile) of each body. */
+  profiles: Record<Body, string>;
   /** Earth candidate whose card is open, if any. */
   siteId: string | null;
-  presetId: string;
   /** The ranked list of curated sites is expanded. */
   listOpen: boolean;
-  /** Similarity to the selected target is draped over Earth. */
-  heatmap: boolean;
 }
 
 export interface AppState {
@@ -115,7 +116,7 @@ export const store = createStore({
   planet: "earth",
   arrival: null,
   overlay: null,
-  atlas: { open: true, targetId: "mars-jezero", siteId: null, presetId: "balanced", listOpen: false, heatmap: false },
+  atlas: { open: true, body: "mars", profiles: { mars: "mars-modern", moon: "moon-maria" }, siteId: null, listOpen: false },
   settings: loadSettings({
     imagery: "esri",
     moonImagery: "moon-wac",

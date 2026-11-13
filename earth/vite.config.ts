@@ -33,8 +33,32 @@ function cesiumStaticAssets(): Plugin {
   };
 }
 
+/**
+ * The rendering engine is a separate 4 MB chunk (1.1 MB gzipped) that App
+ * imports only after React's first render, so its download used to start
+ * after index.js had downloaded, parsed and rendered. A modulepreload hint
+ * in index.html starts it alongside index.js instead.
+ */
+function preloadGlobeChunk(): Plugin {
+  let base = "/";
+  return {
+    name: "preload-globe-chunk",
+    apply: "build",
+    configResolved(config) {
+      base = config.base;
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const chunk = Object.values(ctx.bundle ?? {}).find((c) => c.type === "chunk" && c.name === "GlobeController");
+        return chunk ? [{ tag: "link", attrs: { rel: "modulepreload", crossorigin: true, href: base + chunk.fileName }, injectTo: "head" }] : [];
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), cesiumStaticAssets()],
+  plugins: [react(), cesiumStaticAssets(), preloadGlobeChunk()],
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 6000,

@@ -1,5 +1,6 @@
 // Builds public/data/analogs.json: measures every Earth candidate and every
-// Moon/Mars target from open data, then scores each pair on seven dimensions.
+// Moon/Mars reference target from open data. Scores are not stored: the
+// browser computes them with src/analog/scoring.ts.
 // Run with `npm run analogs`. Raw responses are cached in scripts/.cache, so
 // re-runs are offline; delete that folder to re-download.
 //
@@ -8,7 +9,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fromUrl } from "geotiff";
-import { compare, DIMENSIONS, sunElevation as sunAt } from "../src/analog/scoring.ts";
+import { sunElevation as sunAt } from "../src/analog/scoring.ts";
 import { BODIES, REFS, SITES, TAGS, TARGETS } from "./analog-sites.mjs";
 import { cached, CELL, copdemUrl, getJson, getRange, getText, gridder, HALF, HERE, http, log, mean, median, N, pool, quantile, RAD, RADIUS, terrainMetrics } from "./common.mjs";
 
@@ -276,15 +277,7 @@ async function lunarPoleThermal(target) {
   };
 }
 
-// -------------------------------------------------------------------- scoring
-// The similarity functions live in src/analog/scoring.ts, shared with the grid builder and the browser.
-
 const sunElevation = (lat, body) => sunAt(lat, BODIES[body].obliquity);
-/** The plain numbers the shared scoring works on, from a measured site or target. */
-const measures = (x) => ({
-  ...Object.fromEntries(Object.entries(x.m).map(([k, m]) => [k, m.v])),
-  ice: x.ice, tags: x.tags, cave: x.cave, subsurface: x.subsurface,
-});
 
 // ----------------------------------------------------------------------- main
 
@@ -374,12 +367,6 @@ for (const target of TARGETS) targets.push(await measureTarget(target));
 log("Earth sites");
 const sites = await pool(SITES, 3, measureSite);
 
-const scores = {};
-for (const target of targets) {
-  scores[target.id] = {};
-  for (const s of sites) scores[target.id][s.id] = compare(measures(s), measures(target), TAGS);
-}
-
 const used = new Set();
 for (const m of JSON.stringify({ targets, sites, BODIES }).matchAll(/"(?:src|ref)":"([^"]+)"/g)) used.add(m[1]);
 for (const x of [...targets, ...sites]) x.refs.forEach((r) => used.add(r));
@@ -388,12 +375,10 @@ await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify({
   generated: new Date().toISOString().slice(0, 10),
   window: { cell: CELL, size: N },
-  dimensions: DIMENSIONS,
   tags: TAGS,
   bodies: BODIES,
   targets,
   sites,
-  scores,
   sources: Object.fromEntries(Object.entries(SOURCES).filter(([id]) => used.has(id))),
 }));
 log(`Wrote ${path.relative(process.cwd(), OUT)}: ${targets.length} targets, ${sites.length} sites`);

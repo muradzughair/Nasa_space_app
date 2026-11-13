@@ -1,26 +1,21 @@
-// Builds public/data/grid.bin: every land cell of a global 0.5° grid, measured
-// the same way as the curated sites so that the browser can score any click
-// against any target with the shared scoring module (src/analog/scoring.ts).
+// Builds public/data/grid.bin: every land cell of a global 0.5° grid with the
+// measurements the similarity model needs (src/analog/scoring.ts).
 //
 //   npm run grid                 build (downloads are cached in scripts/.cache)
-//   npm run grid -- --validate   compare grid cells with the curated sites
-//   npm run grid -- --report     list the best-scoring regions per target
+//   npm run grid -- --report     benchmark sites and best cells per profile
 //
-// The file holds measurements, not scores: the similarities are computed in
-// the browser by the same code that scores the curated sites, so mission-goal
-// weights apply to clicks and to the heatmap.
+// The file holds measurements, not scores: the browser scores a cell with the
+// same module this script uses for the report.
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
-import { compare, overall, sunElevation, windPressure } from "../src/analog/scoring.ts";
-import { BODIES, TAGS } from "./analog-sites.mjs";
+import { evaluate, GROUPS, LITHOLOGY, PROFILES, similarity, windPressure } from "../src/analog/scoring.ts";
 import { cached, HERE, http, log, pool } from "./common.mjs";
 import { COLS, modisGrid, ROWS } from "./grid-modis.mjs";
 import { cellTerrain, landTiles, tileStore, windowTiles } from "./grid-terrain.mjs";
 
 const OUT = path.resolve(HERE, "../public/data/grid.bin");
-const ANALOGS = path.resolve(HERE, "../public/data/analogs.json");
 const YEAR = 2023;
 const DEG = 0.5;
 const NODATA = -32768;
@@ -34,38 +29,9 @@ const SOURCES = {
   mod11c3: { label: `MODIS/Terra MOD11C3 v061 monthly land surface temperature, ${YEAR}, 0.05° averaged over the cell (NASA LP DAAC)`, url: "https://doi.org/10.5067/MODIS/MOD11C3.061", kind: "dataset" },
   mod13c2: { label: `MODIS/Terra MOD13C2 v061 monthly NDVI, ${YEAR}, 0.05° averaged over the cell (NASA LP DAAC)`, url: "https://doi.org/10.5067/MODIS/MOD13C2.061", kind: "dataset" },
   glim: { label: "GLiM global lithological map, 0.5° grid (Hartmann & Moosdorf 2012, Geochem. Geophys. Geosyst. 13:Q12004), CC BY 3.0", url: "https://doi.org/10.1594/PANGAEA.788537", kind: "dataset" },
+  impacts: { label: "Impact structures on Earth with coordinates and diameters, from Wikidata (CC0); follows the Earth Impact Database and includes buried and eroded structures", url: "https://www.wikidata.org/wiki/Q55818", kind: "dataset" },
+  gvp: { label: "Global Volcanism Program, Volcanoes of the World: Holocene volcanoes (Smithsonian Institution)", url: "https://volcano.si.edu/", kind: "dataset" },
   geometry: { label: "Computed from latitude and axial tilt", url: "", kind: "computed" },
-};
-
-/**
- * GLiM's sixteen rock classes, and what each says on the atlas's geology
- * vocabulary. A lithology map can only speak to five of the seventeen terms
- * (VOCABULARY); minerals and landforms are beyond it. That is too little to
- * score: a first build that scored it ranked every cell of loose sediment or
- * ice (no score, so no penalty) above every cell of known rock. So geology is
- * never scored for a grid cell; the rock class is stored and the card says
- * in words what it shares with the target. `tags: null` means the class
- * says nothing about bedrock (loose sediment, ice, water, no data); an empty
- * object means known bedrock that is none of the five.
- */
-const VOCABULARY = ["basalt", "carbonate", "sulfate", "chloride", "glass"];
-const LITHOLOGY = {
-  su: { label: "unconsolidated sediments", tags: null },
-  vb: { label: "basic volcanic rocks", tags: { basalt: 1 } },
-  ss: { label: "siliciclastic sedimentary rocks", tags: {} },
-  pb: { label: "basic plutonic rocks", tags: {} },
-  sm: { label: "mixed sedimentary rocks", tags: { carbonate: 0.5 } },
-  sc: { label: "carbonate sedimentary rocks", tags: { carbonate: 1 } },
-  va: { label: "acid volcanic rocks", tags: {} },
-  mt: { label: "metamorphic rocks", tags: {} },
-  pa: { label: "acid plutonic rocks", tags: {} },
-  vi: { label: "intermediate volcanic rocks", tags: {} },
-  wb: { label: "water bodies", tags: null },
-  py: { label: "pyroclastics", tags: { glass: 1 } },
-  pi: { label: "intermediate plutonic rocks", tags: {} },
-  ev: { label: "evaporites", tags: { sulfate: 0.5, chloride: 0.5 } },
-  nd: { label: "no data", tags: null },
-  ig: { label: "ice and glaciers", tags: null },
 };
 
 /** Stored as 16-bit integers: value = stored / scale. */
@@ -83,6 +49,18 @@ const FIELDS = [
   { id: "windPressure", scale: 100, unit: "Pa", src: "power" },
   { id: "pressure", scale: 0.1, unit: "Pa", src: "power" },
   { id: "lithology", scale: 1, unit: "", src: "glim" },
+  { id: "swing", scale: 10, unit: "K", src: "mod11c3" },
+  { id: "airT", scale: 10, unit: "°C", src: "power" },
+  { id: "soilWetness", scale: 1000, unit: "", src: "power" },
+  { id: "albedo", scale: 1000, unit: "", src: "power" },
+  { id: "cloud", scale: 10, unit: "%", src: "power" },
+  { id: "uv", scale: 100, unit: "", src: "power" },
+  // Kilometres beyond the rim of the nearest impact structure (0 inside), and which one (index into the header's list).
+  { id: "impact", scale: 10, unit: "km", src: "impacts" },
+  { id: "impactId", scale: 1, unit: "", src: "" },
+  // Kilometres to the nearest Holocene volcano, and which one.
+  { id: "volcano", scale: 10, unit: "km", src: "gvp" },
+  { id: "volcanoId", scale: 1, unit: "", src: "" },
   // Bit 0: temperatures are MERRA-2 skin temperature from POWER, because MODIS has no value for the cell.
   { id: "flags", scale: 1, unit: "", src: "" },
 ];
@@ -127,9 +105,63 @@ async function lithology() {
   return cells;
 }
 
+// ----------------------------------------------------------------- features
+
+/** Features beyond this distance earn nothing (see near() in scoring.ts), so they are not stored. */
+const REACH = 60;
+const RAD = Math.PI / 180;
+const distanceKm = (lat1, lon1, lat2, lon2) => {
+  const h = Math.sin(((lat2 - lat1) * RAD) / 2) ** 2 + Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin(((lon2 - lon1) * RAD) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+};
+
+/** Impact structures on Earth: [name, lat, lon, diameter in km]. */
+async function impactStructures() {
+  const query = `SELECT ?item ?itemLabel ?lat ?lon ?d WHERE { ?item wdt:P31/wdt:P279* wd:Q55818 . ?item p:P625 ?st . ?st psv:P625 ?v . ?v wikibase:geoGlobe wd:Q2 ; wikibase:geoLatitude ?lat ; wikibase:geoLongitude ?lon . OPTIONAL { ?item wdt:P2386 ?d } SERVICE wikibase:label { bd:serviceParam wikibase:language "en" } }`;
+  const url = `https://query.wikidata.org/sparql?query=${encodeURIComponent(query)}`;
+  const raw = await cached("wikidata-impacts:v1", "json", async () => (await http(url, { headers: { Accept: "application/sparql-results+json", "User-Agent": "analog-grid-build/1.0" } })).text());
+  const seen = new Map();
+  for (const b of JSON.parse(raw).results.bindings) {
+    const id = b.item.value;
+    // A structure with no recorded diameter is taken as 2 km across.
+    const entry = [b.itemLabel.value, +(+b.lat.value).toFixed(3), +(+b.lon.value).toFixed(3), b.d ? +(+b.d.value).toFixed(1) : 2];
+    if (!seen.has(id) || entry[3] > seen.get(id)[3]) seen.set(id, entry);
+  }
+  return [...seen.values()].sort((x, y) => x[0].localeCompare(y[0]));
+}
+
+/** Holocene volcanoes: [name, lat, lon, 1 if basaltic, type]. */
+async function holoceneVolcanoes() {
+  const url = "https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=GVP-VOTW:Smithsonian_VOTW_Holocene_Volcanoes&outputFormat=application/json";
+  const raw = await cached("gvp-holocene:v1", "json", async () => {
+    const json = await (await http(url)).json();
+    return JSON.stringify(json.features.map((f) => [f.properties.Volcano_Name, f.properties.Latitude, f.properties.Longitude, f.properties.Major_Rock_Type ?? "", f.properties.Primary_Volcano_Type ?? ""]));
+  });
+  return JSON.parse(raw)
+    .filter(([, lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon))
+    .map(([name, lat, lon, rock, type]) => [name, +lat.toFixed(3), +lon.toFixed(3), /basalt|basanite|foidite/i.test(rock) && !/andesite/i.test(rock) ? 1 : 0, type.replace(/\(.*\)|\?/g, "").toLowerCase()]);
+}
+
+/**
+ * The nearest feature to a cell: one inside the cell counts as 0 km away
+ * whatever its distance from the centre; otherwise distance from the centre
+ * less the feature's radius.
+ */
+function nearest(features, radiusOf, lat, lon) {
+  let best = null;
+  for (let i = 0; i < features.length; i++) {
+    const [, fLat, fLon] = features[i];
+    if (Math.abs(fLat - lat) > 1.5) continue;
+    const inside = Math.floor((90 - fLat) / DEG) === Math.floor((90 - lat) / DEG) && Math.floor((fLon + 180) / DEG) === Math.floor((lon + 180) / DEG);
+    const km = inside ? 0 : Math.max(0, distanceKm(lat, lon, fLat, fLon) - radiusOf(features[i]));
+    if (km <= REACH && (!best || km < best.km)) best = { km, index: i };
+  }
+  return best;
+}
+
 // ------------------------------------------------------------------ climate
 
-const POWER_PARAMETERS = ["T2M", "TS", "TS_MAX", "TS_MIN", "PRECTOTCORR_SUM", "WS10M", "AOD_55", "TQV", "PS"];
+const POWER_PARAMETERS = ["T2M", "TS", "TS_MAX", "TS_MIN", "PRECTOTCORR_SUM", "WS10M", "AOD_55", "TQV", "PS", "GWETTOP", "ALLSKY_SRF_ALB", "CLOUD_AMT", "ALLSKY_SFC_UV_INDEX"];
 const P_LAT = 361; // 0.5° nodes from 90°S
 const P_LON = 576; // 0.625° nodes from 180°W
 
@@ -238,6 +270,7 @@ async function measure() {
     boxes.set(`${box.lat},${box.lon}`, box);
   }
   const climate = await powerClimate([...boxes.values()]);
+  if (process.env.GRID_CLIMATE_ONLY) process.exit(0);
 
   log("Lithology (GLiM)");
   const rock = await lithology();
@@ -245,6 +278,11 @@ async function measure() {
   const token = process.env.EARTHDATA_TOKEN?.trim();
   log(token ? "Land surface temperature and NDVI (MODIS CMG via Earthdata)" : "No EARTHDATA_TOKEN: temperatures fall back to POWER skin temperature and vegetation is left empty");
   const modis = await modisGrid(YEAR, token);
+
+  log("Impact structures (Wikidata) and Holocene volcanoes (Global Volcanism Program)");
+  const impacts = await impactStructures();
+  const volcanoes = await holoceneVolcanoes();
+  log(`  ${impacts.length} impact structures, ${volcanoes.length} volcanoes`);
 
   const cells = [];
   for (const [index, t] of [...ground].sort((a, b) => a[0] - b[0])) {
@@ -256,67 +294,84 @@ async function measure() {
     const tmax = measured ? modis.tmax[index] : at("TS_MAX") + 273.15;
     // A cell with no climate at all (none of POWER's nodes around it has data) cannot be scored.
     if (![pressure, air, wind, tmean, tmax, at("PRECTOTCORR_SUM"), at("TQV"), at("AOD_55")].every(Number.isFinite)) continue;
+    const crater = nearest(impacts, (f) => f[3] / 2, lat, lon);
+    const volcano = nearest(volcanoes, () => 0, lat, lon);
+    const optional = (v) => (Number.isFinite(v) ? v : null);
     cells.push({
       index, lat, lon, ...t, tmean, tmax,
+      swing: measured ? optional(modis.swing[index]) : null,
+      airT: at("T2M"), soilWetness: optional(at("GWETTOP")), albedo: optional(at("ALLSKY_SRF_ALB")), cloud: optional(at("CLOUD_AMT")), uv: optional(at("ALLSKY_SFC_UV_INDEX")),
+      impact: crater?.km ?? null, impactId: crater?.index ?? null, volcano: volcano?.km ?? null, volcanoId: volcano?.index ?? null,
+      volcanoBasaltic: volcano ? volcanoes[volcano.index][3] === 1 : false,
       ndvi: modis && Number.isFinite(modis.ndvi[index]) ? modis.ndvi[index] : null,
       precipitation: at("PRECTOTCORR_SUM"), vapour: at("TQV"), aod: at("AOD_55"),
       windPressure: windPressure(pressure, air, wind), pressure,
       lithology: rock[index], flags: measured ? 0 : 1,
     });
   }
-  return { cells, modis: !!modis };
+  return { cells, modis: !!modis, impacts, volcanoes };
 }
 
 /** The numbers the shared scoring works on, for a grid cell. */
-const earthMeasures = (cell) => ({
-  ...cell,
-  sun: sunElevation(cell.lat, BODIES.earth.obliquity),
-  ice: null, // no global ground-ice source: the water score uses dryness and vapour only
-  tags: null, // rock type is carried for the card but never scored (see LITHOLOGY)
-});
-const targetMeasures = (t) => ({ ...Object.fromEntries(Object.entries(t.m).map(([k, m]) => [k, m.v])), ice: t.ice, tags: t.tags, subsurface: t.subsurface });
+const earthMeasures = (cell) => ({ ...cell, swing: cell.swing, tags: null, ice: null });
 
-const { cells, modis } = await measure();
-const atlas = JSON.parse(readFileSync(ANALOGS, "utf8"));
+const { cells, modis, impacts, volcanoes } = await measure();
 const mode = process.argv[2];
 
-if (mode === "--validate") {
-  log("\nCurated site against the grid cell that contains it (site value -> cell value)");
+if (mode === "--report") {
+  // Established analog sites (brief, section 6): a calibrated model ranks them near the top for their body.
+  const BENCHMARKS = [
+    ["Yungay, Atacama", -24.08, -69.92, "mars"], ["McMurdo Dry Valleys", -77.6, 161.5, "mars"], ["Rio Tinto", 37.72, -6.55, "mars"],
+    ["Mauna Kea", 19.82, -155.47, "both"], ["Askja, Iceland", 65.03, -16.75, "both"], ["Haughton crater", 75.38, -89.67, "both"],
+    ["Hanksville, Utah", 38.41, -110.79, "mars"], ["Dallol, Danakil", 14.24, 40.3, "mars"], ["Pilbara", -21.15, 119.43, "mars"],
+    ["Lake Salda", 37.5, 29.64, "mars"], ["Qaidam Basin", 38.5, 91.4, "mars"], ["Lanzarote", 29.03, -13.63, "both"],
+    ["San Francisco Volcanic Field", 35.35, -111.5, "moon"], ["Meteor Crater", 35.03, -111.02, "moon"], ["Stillwater Complex", 45.4, -109.9, "moon"],
+    ["Mistastin crater", 55.88, -63.3, "moon"], ["Lonar crater", 19.98, 76.51, "both"], ["Ries crater", 48.88, 10.57, "moon"],
+    ["Craters of the Moon", 43.37, -113.49, "both"],
+    // Places that must not score well.
+    ["(Amazon rainforest)", -3.25, -62.25, "none"], ["(Greenland ice sheet)", 72.25, -40.25, "none"], ["(Deccan farmland)", 18.25, 75.25, "none"], ["(Rub al Khali)", 20.25, 50.25, "none"], ["(Paris basin)", 48.75, 2.25, "none"],
+  ];
   const byIndex = new Map(cells.map((c) => [c.index, c]));
-  for (const s of atlas.sites) {
-    const cell = byIndex.get(Math.floor((90 - s.lat) / DEG) * COLS + Math.floor((s.lon + 180) / DEG));
-    if (!cell) { log(`${s.id.padEnd(12)} no land cell`); continue; }
-    const pair = (k, d = 1) => `${k} ${s.m[k].v.toFixed(d)} -> ${cell[k] == null ? "n/a" : cell[k].toFixed(d)}`;
-    log(`${s.id.padEnd(12)} ${pair("slope", 2)}  ${pair("tmean")}  ${pair("tmax")}  ${pair("ndvi", 2)}  ${pair("precipitation", 0)}  ${pair("aod", 2)}  ${pair("windPressure")}  ${cell.lithology}`);
-  }
-} else if (mode === "--report") {
-  for (const target of atlas.targets) {
-    const tm = targetMeasures(target);
-    const ranked = cells
-      .map((c) => ({ c, score: overall(compare(earthMeasures(c), tm, TAGS), target.weights) }))
-      .sort((a, b) => b.score - a.score);
-    log(`\n${target.name}: best cells (default weights)`);
-    // Spread the list out: skip cells within 3° of one already listed.
+  const cellOf = (lat, lon) => byIndex.get(Math.floor((90 - lat) / DEG) * COLS + Math.floor((lon + 180) / DEG));
+  const wanted = process.argv[3];
+  for (const profile of PROFILES) {
+    if (wanted && !profile.id.includes(wanted)) continue;
+    const scores = cells.map((c) => similarity(earthMeasures(c), profile));
+    const sorted = Float64Array.from(scores).sort();
+    const rankOf = (v) => 100 * (1 - sorted.findIndex((x) => x >= v) / sorted.length);
+    const q = (f) => (sorted[Math.round(f * (sorted.length - 1))] * 100).toFixed(0);
+    log(`\n=== ${profile.body} / ${profile.name}: median ${q(0.5)}%, 90th ${q(0.9)}%, 99th ${q(0.99)}%, max ${q(1)}%`);
+    const groups = GROUPS.filter((g) => profile.weights[g.id] > 0);
+    const line = (e) => groups.map((g) => `${g.short} ${e.groups[g.id].score == null ? "n/a" : Math.round(e.groups[g.id].score * 100)}`).join(" ");
+    for (const [name, lat, lon, body] of BENCHMARKS) {
+      const cell = cellOf(lat, lon);
+      if (!cell) { log(`  ${name.padEnd(30)} no land cell`); continue; }
+      const e = evaluate(earthMeasures(cell), profile);
+      const mark = body === "both" || body === profile.body ? "*" : " ";
+      log(`${mark} ${name.padEnd(30)} ${(e.overall * 100).toFixed(0).padStart(3)}%  top ${rankOf(e.overall).toFixed(1).padStart(5)}%  ${line(e)}  [${cell.lithology}]`);
+    }
+    log("  best cells:");
+    const ranked = cells.map((c, i) => ({ c, score: scores[i] })).sort((a, b) => b.score - a.score);
     const shown = [];
     for (const r of ranked) {
-      if (shown.some((s) => Math.abs(s.c.lat - r.c.lat) < 3 && Math.abs(s.c.lon - r.c.lon) < 3)) continue;
+      // Spread the list out: skip cells within 3° of one already listed.
+      if (shown.some((x) => Math.abs(x.c.lat - r.c.lat) < 3 && Math.abs(x.c.lon - r.c.lon) < 3)) continue;
       shown.push(r);
-      const d = compare(earthMeasures(r.c), tm, TAGS);
-      log(`  ${(r.score * 100).toFixed(0)}%  ${r.c.lat.toFixed(2)}, ${r.c.lon.toFixed(2)}  ${Object.entries(d).map(([k, v]) => `${k} ${v.score == null ? "n/a" : Math.round(v.score * 100)}`).join(" ")}  [${r.c.lithology}]`);
-      if (shown.length >= 25) break;
+      log(`  ${(r.score * 100).toFixed(0)}%  ${r.c.lat.toFixed(2)}, ${r.c.lon.toFixed(2)}  ${line(evaluate(earthMeasures(r.c), profile))}  [${r.c.lithology}]${r.c.impactId != null ? ` ${impacts[r.c.impactId][0]}` : ""}${r.c.volcanoId != null ? ` ${volcanoes[r.c.volcanoId][0]}` : ""}`);
+      if (shown.length >= 12) break;
     }
   }
 } else {
   const codes = Object.keys(LITHOLOGY);
   const header = Buffer.from(JSON.stringify({
-    version: 1,
+    version: 2,
     generated: new Date().toISOString().slice(0, 10),
     cols: COLS, rows: ROWS, cellDegrees: DEG, count: cells.length, nodata: NODATA,
     fields: FIELDS.map((f) => (f.id === "tmean" || f.id === "tmax" ? { ...f, altSrc: "power" } : f)),
     modis,
     year: YEAR,
-    vocabulary: VOCABULARY,
-    lithology: codes.map((id) => ({ id, ...LITHOLOGY[id] })),
+    lithology: codes.map((id) => ({ id, label: LITHOLOGY[id].label })),
+    impacts, volcanoes,
     sources: Object.fromEntries(Object.entries(SOURCES).filter(([id]) => modis || !id.startsWith("mod"))),
   }));
   const padded = Math.ceil(header.length / 4) * 4;

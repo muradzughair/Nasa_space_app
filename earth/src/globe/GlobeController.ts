@@ -8,11 +8,13 @@
  * results from the store.
  */
 import "../cesiumBase";
-import "cesium/Build/Cesium/Widgets/widgets.css";
+// Only the canvas widget's own styles: none of Viewer's UI widgets are used.
+import "cesium/Build/Cesium/Widgets/CesiumWidget/CesiumWidget.css";
 import {
   Cartesian2,
   Cartesian3,
   Cartographic,
+  CesiumWidget,
   Color,
   EasingFunction,
   Ellipsoid,
@@ -31,7 +33,6 @@ import {
   TextureMagnificationFilter,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
-  Viewer,
   WebMercatorTilingScheme,
 } from "cesium";
 import { ION_TOKEN } from "../config";
@@ -107,7 +108,13 @@ export interface SelectOptions {
 }
 
 export class GlobeController {
-  readonly viewer: Viewer;
+  /**
+   * CesiumWidget rather than Viewer: Viewer only adds UI widgets (timeline,
+   * animation, base-layer picker, geocoder...) that this app turns off, yet
+   * bundles them and their stylesheet. Entities, the clock and picking all
+   * live on CesiumWidget.
+   */
+  readonly viewer: CesiumWidget;
 
   private readonly handler: ScreenSpaceEventHandler;
   private readonly cleanup: (() => void)[] = [];
@@ -200,18 +207,8 @@ export class GlobeController {
     this.maxResolutionScale = Math.min(pixelRatio, coarsePointer ? 1.5 : 2) / pixelRatio;
     this.baseScreenSpaceError = coarsePointer ? 2.5 : 1.6;
 
-    const viewer = (this.viewer = new Viewer(container, {
+    const viewer = (this.viewer = new CesiumWidget(container, {
       baseLayer: false,
-      baseLayerPicker: false,
-      geocoder: false,
-      homeButton: false,
-      sceneModePicker: false,
-      navigationHelpButton: false,
-      animation: false,
-      timeline: false,
-      fullscreenButton: false,
-      infoBox: false,
-      selectionIndicator: false,
       scene3DOnly: true,
       creditContainer,
       msaaSamples: coarsePointer ? 2 : 4,

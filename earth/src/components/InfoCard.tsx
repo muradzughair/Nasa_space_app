@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { type AtlasData, overall, percent, type Site, type Source, type Target, useAtlas, weightsFor } from "../analog/data";
-import { type Cell, cellAt, compareCell, type Grid, loadGrid, nearbySite } from "../analog/grid";
+import { type AtlasData, percent, type Site, type Source, useAtlas } from "../analog/data";
+import { cellAt, type Features, type Grid, loadGrid, nearbySite } from "../analog/grid";
+import { type Body, type EarthMeasures, evaluate, type Profile, profileById, profilesOf, similarity } from "../analog/scoring";
 import { formatDistance, formatLat, formatLon, formatPopulation } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
-import { travel } from "../state/navigation";
-import { type Selection, type SelectionKind, updateAtlas, useStore } from "../state/store";
+import { type AtlasState, type Selection, type SelectionKind, updateAtlas, useStore } from "../state/store";
 import { AnalogCard } from "./AnalogCard";
-import { Comparison, DimensionBars, SourceList } from "./Comparison";
+import { Comparison, SourceList } from "./Comparison";
 import { CloseIcon } from "./icons";
+import { flyToProfile } from "./TargetBar";
 
 const KIND_LABEL: Record<SelectionKind, string> = {
   country: "Country",
@@ -37,8 +38,8 @@ export function useGrid(wanted: boolean): { grid: Grid | null; failed: boolean }
 
 /**
  * The reading surface, on the right: a curated site's full card when one is
- * open, otherwise the place that was clicked. On Earth a clicked place is
- * compared with all four targets from the global grid.
+ * open, otherwise the place that was clicked. On Earth the card offers a
+ * button; pressing it scores that one place against Mars and the Moon.
  */
 export function InfoCard({ globe }: { globe: GlobeController | null }) {
   const selection = useStore((s) => s.selection);
@@ -46,11 +47,13 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
   const atlas = useStore((s) => s.atlas);
   const { data } = useAtlas();
   const onEarth = planet === "earth";
-  const { grid, failed } = useGrid(onEarth && !!selection && !selection.water);
+  // Nothing is scored until the button is pressed, and only the selected spot.
+  const [scoredId, setScoredId] = useState<number | null>(null);
+  const scored = !!selection && scoredId === selection.id;
+  const { grid, failed } = useGrid(onEarth && scored);
 
   const site = data?.sites.find((s) => s.id === atlas.siteId) ?? null;
-  const target = data?.targets.find((t) => t.id === atlas.targetId) ?? data?.targets[0] ?? null;
-  if (data && site && target) return <AnalogCard globe={globe} data={data} site={site} target={target} />;
+  if (data && site) return <AnalogCard globe={globe} data={data} site={site} />;
   if (!selection) return null;
 
   return (
@@ -89,12 +92,16 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
       {onEarth &&
         (selection.water ? (
           <p className="cell-note">Open water: there is no ground here to compare with the Moon or Mars.</p>
+        ) : !scored ? (
+          <button type="button" className="card-action is-primary score-button" onClick={() => setScoredId(selection.id)}>
+            Score this spot
+          </button>
         ) : !data || (!grid && !failed) ? (
-          <p className="cell-note">Loading the global comparison grid…</p>
+          <p className="cell-note">Scoring…</p>
         ) : !grid ? (
-          <p className="cell-note">The global comparison grid could not be loaded.</p>
+          <p className="cell-note">The global grid could not be loaded.</p>
         ) : (
-          <CellComparison key={selection.id} globe={globe} data={data} grid={grid} selection={selection} presetId={atlas.presetId} />
+          <CellComparison key={selection.id} globe={globe} data={data} grid={grid} selection={selection} atlas={atlas} />
         ))}
 
       <button type="button" className="card-action" onClick={() => globe?.zoomToSelection()}>
@@ -104,92 +111,113 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
   );
 }
 
+const BODIES: Body[] = ["mars", "moon"];
+const bodyName = (body: Body) => (body === "moon" ? "the Moon" : "Mars");
+
+/**
+ * The two headline numbers (how similar this place is to Mars and to the
+ * Moon, for the chosen version of each) and, for the body being read, every
+ * version of it.
+ */
+export function BodyScores({ measures, atlas }: { measures: EarthMeasures; atlas: AtlasState }) {
+  const rows = useMemo(() => profilesOf(atlas.body).map((profile) => ({ profile, score: similarity(measures, profile) })), [measures, atlas.body]);
+  return (
+    <section className="atlas-section cell-targets">
+      <div className="body-scores" role="radiogroup" aria-label="Similarity to Mars and to the Moon">
+        {BODIES.map((body) => {
+          const profile = profileById(atlas.profiles[body]);
+          return (
+            <button key={body} type="button" role="radio" aria-checked={body === atlas.body} onClick={() => updateAtlas({ body })}>
+              <span className="body-score">{percent(similarity(measures, profile))}</span>
+              <span className="body-name">like {bodyName(body)}</span>
+              <span className="atlas-site-detail">{profile.name}</span>
+            </button>
+          );
+        })}
+      </div>
+      <h3 id="cell-targets-heading">Versions of {bodyName(atlas.body)}</h3>
+      <div role="radiogroup" aria-labelledby="cell-targets-heading">
+        {rows.map((r) => (
+          <button
+            key={r.profile.id}
+            type="button"
+            role="radio"
+            aria-checked={r.profile.id === atlas.profiles[atlas.body]}
+            title={r.profile.summary}
+            onClick={() => updateAtlas({ profiles: { ...atlas.profiles, [atlas.body]: r.profile.id } })}
+          >
+            <span className="cell-target-name">{r.profile.name}</span>
+            <span className="atlas-bar" aria-hidden="true">
+              <i style={{ width: percent(r.score) }} />
+            </span>
+            <span className="atlas-score">{percent(r.score)}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** What was found near the point, in words. */
+export function featureNote(features: Features): string | null {
+  const parts: string[] = [];
+  if (features.impactName) parts.push(`${features.impactName} (impact structure) ${features.impact! < 0.5 ? "is here" : `is ${Math.round(features.impact!)} km from its rim`}`);
+  if (features.volcanoName) parts.push(`${features.volcanoName} (Holocene volcano) is ${Math.round(features.volcano!)} km away`);
+  return parts.length ? `${parts.join("; ")}.` : null;
+}
+
 interface CellProps {
   globe: GlobeController | null;
   data: AtlasData;
   grid: Grid;
   selection: Selection;
-  presetId: string;
+  atlas: AtlasState;
 }
 
-/** The clicked place against all four targets, with the best match opened. */
-function CellComparison({ globe, data, grid, selection, presetId }: CellProps) {
+/** The clicked place against Mars and the Moon, with the chosen version opened. */
+function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
   const cell = useMemo(() => cellAt(grid, selection.lat, selection.lon), [grid, selection.lat, selection.lon]);
-  const rows = useMemo(
-    () =>
-      cell
-        ? data.targets.map((target) => {
-            const scores = compareCell(data, cell, target);
-            return { target, scores, score: overall(scores, weightsFor(target, presetId)) };
-          })
-        : [],
-    [cell, data, grid, presetId],
-  );
-  const best = rows.reduce<(typeof rows)[number] | null>((a, b) => (!a || b.score > a.score ? b : a), null);
-  const [shownId, setShownId] = useState<string | null>(null);
+  const profile = profileById(atlas.profiles[atlas.body]);
+  const evaluation = useMemo(() => (cell ? evaluate(cell.measures, profile) : null), [cell, profile]);
   const near = useMemo(() => nearbySite(data, selection.lat, selection.lon), [data, selection.lat, selection.lon]);
 
-  if (!cell || !best) {
+  if (!cell || !evaluation) {
     return (
       <>
-        <p className="cell-note">No land cell in the grid here. Small islands and some coasts are not covered, so there is no comparison.</p>
+        <p className="cell-note">No land cell in the grid here. Small islands and some coasts are not covered, so there is no score.</p>
         {near && <NearbyLink site={near.site} distance={near.distance} />}
       </>
     );
   }
-  const shown = rows.find((r) => r.target.id === shownId) ?? best;
   const { header } = grid;
   const width = Math.round(111.2 * header.cellDegrees * Math.cos((cell.lat * Math.PI) / 180));
-  const sources: Source[] = [
-    ...cell.sources.filter((id) => header.sources[id]).map((id) => header.sources[id]),
-    ...sourcesOf(data, shown.target),
-  ];
-  const flyTarget = (t: Target) => travel(globe, t.body, { lat: t.lat, lon: t.lon, span: 160_000, title: t.name, subtitle: t.region });
+  const sources: Source[] = [...cell.sources.filter((id) => header.sources[id]).map((id) => header.sources[id]), ...sourcesOf(data, profile)];
+  const found = featureNote(cell.features);
 
   return (
     <>
-      <section className="atlas-section cell-targets">
-        <h3 id="cell-targets-heading">Similarity to each target</h3>
-        <div role="radiogroup" aria-labelledby="cell-targets-heading">
-          {rows.map((r) => (
-            <button key={r.target.id} type="button" role="radio" aria-checked={r === shown} onClick={() => setShownId(r.target.id)}>
-              <span className="cell-target-name">
-                <span className="atlas-target-body">{r.target.body === "moon" ? "Moon" : "Mars"}</span> {r.target.name}
-                {r === best && <span className="cell-best">best match</span>}
-              </span>
-              <span className="atlas-bar" aria-hidden="true">
-                <i style={{ width: percent(r.score) }} />
-              </span>
-              <span className="atlas-score">{percent(r.score)}</span>
-            </button>
-          ))}
-        </div>
-        <p className="cell-scale">
-          Values are for the grid cell around this point: {Math.round(111.2 * header.cellDegrees)} km north to south, {width} km east to west. Climate values are
-          averages over about 50 km; terrain is a 32 km window at the cell centre, not the exact spot clicked.
-        </p>
-      </section>
+      <BodyScores measures={cell.measures} atlas={atlas} />
 
-      <Comparison data={data} target={shown.target} scores={shown.scores} label="This cell" pressure={cell.pressure} />
+      <Comparison data={data} profile={profile} evaluation={evaluation} label="This spot" pressure={cell.measures.pressure} />
 
       <section className="atlas-section">
-        <h3>Every dimension</h3>
-        <DimensionBars data={data} scores={shown.scores} />
+        <h3>About these numbers</h3>
         <ul className="cell-caveats">
-          <li>{geologyNote(data, cell, shown.target, header.vocabulary)}</li>
-          <li>Ground ice is not mapped globally, so water and ice uses dryness and water vapour only.</li>
           <li>
-            {cell.modelledTemperature
-              ? "MODIS has no land surface temperature here; thermal uses MERRA-2 skin temperature from NASA POWER."
-              : `Peak temperature is the warmest monthly daytime mean of ${header.year}, which runs lower than the 8-day peak used for curated sites.`}
+            Values are for the grid cell around this point: {Math.round(111.2 * header.cellDegrees)} km north to south, {width} km east to west. Climate and rock type are averages
+            over about 50 km; terrain is a 32 km window at the cell centre. Impact structures and volcanoes are measured from the point itself.
           </li>
-          {cell.measures.ndvi == null && <li>No vegetation data here, so sterility is left out of the score.</li>}
+          {found && <li>{found}</li>}
+          {cell.modelledTemperature && (
+            <li>MODIS has no land surface temperature here; temperature is MERRA-2 skin temperature from NASA POWER and the day-to-night swing is left out.</li>
+          )}
+          <li>Soil organic carbon, soil pH, surface colour and spectrometer mineral maps are not in the grid; their groups rest on the parts listed above.</li>
         </ul>
       </section>
 
       {near && <NearbyLink site={near.site} distance={near.distance} />}
-      <button type="button" className="card-action" onClick={() => flyTarget(shown.target)}>
-        Fly to {shown.target.name}
+      <button type="button" className="card-action" onClick={() => flyToProfile(globe, profile)}>
+        Fly to {profile.place.name} on {bodyName(profile.body)}
       </button>
 
       <SourceList sources={sources} />
@@ -201,28 +229,13 @@ function CellComparison({ globe, data, grid, selection, presetId }: CellProps) {
 function NearbyLink({ site, distance }: { site: Site; distance: number }) {
   return (
     <button type="button" className="card-action is-primary" onClick={() => updateAtlas({ siteId: site.id })}>
-      Full analog card: {site.name.split(",")[0]} ({Math.round(distance / 1000)} km away)
+      Reference site: {site.name.split(",")[0]} ({Math.round(distance / 1000)} km away)
     </button>
   );
 }
 
-/**
- * Geology is not scored for a grid cell: the only global source is a rock-type
- * map, which can speak to five of the seventeen terms. What it does say is
- * reported in words.
- */
-function geologyNote(data: AtlasData, cell: Cell, target: Target, vocabulary: string[]): string {
-  const unscored = "Geology is not scored for grid cells: minerals and landforms are not mapped globally.";
-  if (!cell.lithology) return `${unscored} The GLiM lithology map has no rock type here.`;
-  const rock = `GLiM maps the rock type here as ${cell.lithology.label}`;
-  const tags = cell.lithology.tags;
-  if (!tags) return `${unscored} ${rock}, which says nothing about bedrock.`;
-  const shared = vocabulary.filter((k) => tags[k] && target.tags[k]).map((k) => data.tags[k]);
-  return `${unscored} ${rock}${shared.length ? `, which shares ${shared.join(" and ")} with ${target.name}` : `, none of the materials it could share with ${target.name}`}.`;
-}
-
-function sourcesOf(data: AtlasData, target: Target): Source[] {
-  const ids = new Set<string>([...target.refs, data.bodies[target.body].radiation.ref, data.bodies.earth.radiation.ref]);
-  for (const m of Object.values(target.m)) ids.add(m.src);
-  return [...ids].filter((id) => data.sources[id]).map((id) => data.sources[id]);
+/** Sources behind a profile: its terrain statistics and the facts about its body. */
+export function sourcesOf(data: AtlasData, profile: Profile): Source[] {
+  const ids = [profile.terrain.src, data.bodies[profile.body].radiation.ref, data.bodies.earth.radiation.ref];
+  return ids.filter((id) => data.sources[id]).map((id) => data.sources[id]);
 }

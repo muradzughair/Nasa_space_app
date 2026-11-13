@@ -1,42 +1,33 @@
-import { type AtlasData, overall, percent, rank, type Site, type Target, weightsFor, withUnit } from "../analog/data";
+import { useMemo } from "react";
+import type { AtlasData, Site } from "../analog/data";
+import { type Grid, siteMeasures } from "../analog/grid";
+import { evaluate, profileById, similarity } from "../analog/scoring";
 import { formatLat, formatLon } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
 import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
-import { Comparison, DimensionBars, SourceList } from "./Comparison";
+import { Comparison, SourceList, where } from "./Comparison";
 import { BackIcon, CloseIcon } from "./icons";
+import { BodyScores, featureNote, sourcesOf, useGrid } from "./InfoCard";
+import { flyToProfile } from "./TargetBar";
 
 interface Props {
   globe: GlobeController | null;
   data: AtlasData;
   site: Site;
-  target: Target;
 }
 
-/** The full card of one curated Earth site against the selected target. */
-export function AnalogCard({ globe, data, site, target }: Props) {
-  const presetId = useStore((s) => s.atlas.presetId);
-  const planet = useStore((s) => s.planet);
-  const weights = weightsFor(target, presetId);
-  const scores = data.scores[target.id][site.id];
-  const place = rank(data, target, weights).findIndex((r) => r.site.id === site.id) + 1;
-  const body = data.bodies[target.body];
-  const onTarget = planet !== "earth";
-
-  const sourceIds = new Set<string>([...site.refs, ...target.refs, body.radiation.ref, data.bodies.earth.radiation.ref]);
-  for (const m of [...Object.values(site.m), ...Object.values(target.m), ...target.facts]) sourceIds.add(m.src);
-
-  const flySite = () => travel(globe, "earth", { lat: site.lat, lon: site.lon, span: 70_000, title: site.name, subtitle: site.country });
-  const flyTarget = () => travel(globe, target.body, { lat: target.lat, lon: target.lon, span: 160_000, title: target.name, subtitle: target.region });
-  const close = () => updateAtlas({ siteId: null });
+/** The full card of one curated Earth site against the chosen version of Mars or the Moon. */
+export function AnalogCard({ globe, data, site }: Props) {
+  const { grid, failed } = useGrid(true);
 
   return (
-    <aside className="card panel reading" aria-label={`${site.name} compared with ${target.name}`}>
-      <button type="button" className="card-close" onClick={close} aria-label="Close">
+    <aside className="card panel reading" aria-label={site.name}>
+      <button type="button" className="card-close" onClick={() => updateAtlas({ siteId: null })} aria-label="Close">
         <CloseIcon />
       </button>
       <button type="button" className="atlas-back" onClick={() => updateAtlas({ siteId: null, listOpen: true })}>
-        <BackIcon /> All curated sites
+        <BackIcon /> All reference sites
       </button>
 
       <div className="card-kind">{site.known ? "Known analog" : "Less-studied site"}</div>
@@ -46,24 +37,47 @@ export function AnalogCard({ globe, data, site, target }: Props) {
       </p>
       <p className="atlas-summary">{site.summary}</p>
 
-      <div className="atlas-match">
-        <span className="atlas-match-score">{percent(overall(scores, weights))}</span>
-        <span>
-          match to <strong>{target.name}</strong>
-          <span className="atlas-site-detail">
-            ranked {place} of {data.sites.length} for this mission goal
-          </span>
-        </span>
-      </div>
+      {grid ? (
+        <SiteScores globe={globe} data={data} site={site} grid={grid} />
+      ) : (
+        <p className="cell-note">{failed ? "The global grid could not be loaded." : "Loading the global grid…"}</p>
+      )}
+    </aside>
+  );
+}
 
-      <Comparison data={data} target={target} scores={scores} label={site.name.split(",")[0]} pressure={site.m.pressure.v} />
+function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
+  const atlas = useStore((s) => s.atlas);
+  const planet = useStore((s) => s.planet);
+  const profile = profileById(atlas.profiles[atlas.body]);
+  const { measures, features } = useMemo(() => siteMeasures(grid, site), [grid, site]);
+  const evaluation = useMemo(() => evaluate(measures, profile), [measures, profile]);
+  const place = useMemo(
+    () => 1 + data.sites.filter((other) => other.id !== site.id && similarity(siteMeasures(grid, other).measures, profile) > evaluation.overall).length,
+    [data, grid, site, profile, evaluation],
+  );
+  const onTarget = planet !== "earth";
+  const found = featureNote(features);
+
+  const sourceIds = new Set<string>(site.refs);
+  for (const m of Object.values(site.m)) sourceIds.add(m.src);
+  const flySite = () => travel(globe, "earth", { lat: site.lat, lon: site.lon, span: 70_000, title: site.name, subtitle: site.country });
+
+  return (
+    <>
+      <BodyScores measures={measures} atlas={atlas} />
+      <p className="cell-scale">
+        Ranked {place} of {data.sites.length} reference sites for {where(profile)}, {profile.name.toLowerCase()}.
+      </p>
+
+      <Comparison data={data} profile={profile} evaluation={evaluation} label={site.name.split(",")[0]} pressure={measures.pressure} />
 
       <div className="atlas-actions">
         <button type="button" className={`card-action${onTarget ? " is-primary" : ""}`} onClick={flySite}>
-          Fly to Earth analog
+          Fly to this site
         </button>
-        <button type="button" className={`card-action${onTarget ? "" : " is-primary"}`} onClick={flyTarget}>
-          Fly to target
+        <button type="button" className={`card-action${onTarget ? "" : " is-primary"}`} onClick={() => flyToProfile(globe, profile)}>
+          Fly to {profile.place.name}
         </button>
       </div>
 
@@ -73,27 +87,24 @@ export function AnalogCard({ globe, data, site, target }: Props) {
       </section>
 
       <section className="atlas-section">
-        <h3>Every dimension</h3>
-        <DimensionBars data={data} scores={scores} />
+        <h3>About these numbers</h3>
+        <ul className="cell-caveats">
+          <li>
+            Terrain, temperature, rainfall and vegetation are measured at the site; rock and soil materials are coded from the cited papers. Soil wetness, albedo, UV, cloud and
+            the day-to-night swing come from the 50 km grid cell around it
+            {measures.albedo == null ? ", which does not exist for this island, so they are left out" : ""}.
+          </li>
+          {found && <li>{found}</li>}
+        </ul>
       </section>
 
-      {(target.notes.length > 0 || target.facts.length > 0) && (
-        <section className="atlas-section">
-          <h3>About {target.name}</h3>
-          <ul>
-            {target.facts.map((f) => (
-              <li key={f.label}>
-                {f.label}: {withUnit(f.v, f.unit)}
-              </li>
-            ))}
-            {target.notes.map((n) => (
-              <li key={n.text}>{n.text}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <SourceList sources={[...sourceIds].filter((id) => data.sources[id]).map((id) => data.sources[id])} />
-    </aside>
+      <SourceList
+        sources={[
+          ...[...sourceIds].filter((id) => data.sources[id]).map((id) => data.sources[id]),
+          ...Object.values(grid.header.sources).filter((x) => /POWER|GLiM|Impact|Volcanism/.test(x.label)),
+          ...sourcesOf(data, profile),
+        ]}
+      />
+    </>
   );
 }

@@ -124,13 +124,14 @@ async function cellMeans(granule, variable, token, valid, scale) {
  * Per-cell thermal and vegetation values for one year, or null without a
  * token. tmean: mean of the monthly day and night means. tmax: warmest
  * monthly day mean. ndvi: 90th percentile of the monthly NDVI (the growing
- * season, as for the curated sites).
+ * season, as for the curated sites). swing: mean monthly day temperature
+ * minus mean monthly night temperature.
  */
 export async function modisGrid(year, token) {
   if (!token) return null;
   const lstGranules = await granules("MOD11C3", year);
   const ndviGranules = await granules("MOD13C2", year);
-  const tmean = new Float32Array(COLS * ROWS).fill(NaN), tmax = new Float32Array(COLS * ROWS).fill(NaN), ndvi = new Float32Array(COLS * ROWS).fill(NaN);
+  const tmean = new Float32Array(COLS * ROWS).fill(NaN), tmax = new Float32Array(COLS * ROWS).fill(NaN), ndvi = new Float32Array(COLS * ROWS).fill(NaN), swing = new Float32Array(COLS * ROWS).fill(NaN);
   const day = [], night = [], veg = [];
   // One month at a time: each response is about 50 MB.
   for (const g of lstGranules) {
@@ -144,9 +145,10 @@ export async function modisGrid(year, token) {
     if (d.length >= 4 && n.length >= 4) {
       tmean[i] = (d.reduce((a, b) => a + b, 0) / d.length + n.reduce((a, b) => a + b, 0) / n.length) / 2;
       tmax[i] = Math.max(...d);
+      swing[i] = d.reduce((a, b) => a + b, 0) / d.length - n.reduce((a, b) => a + b, 0) / n.length;
     }
     const v = veg.map((m) => m[i]).filter(Number.isFinite).sort((a, b) => a - b);
     if (v.length >= 3) ndvi[i] = v[Math.min(v.length - 1, Math.round(0.9 * (v.length - 1)))];
   }
-  return { tmean, tmax, ndvi };
+  return { tmean, tmax, ndvi, swing };
 }

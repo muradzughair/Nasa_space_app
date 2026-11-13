@@ -1,76 +1,57 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { percent, PRESETS, rank, type Target, useAtlas, weightsFor } from "../analog/data";
-import { HEAT_RANGE, heatGradient, type Heatmap, renderHeatmap } from "../analog/grid";
-import { formatLat, formatLon } from "../geo/coords";
+import { percent, useAtlas } from "../analog/data";
+import { siteMeasures } from "../analog/grid";
+import { type Body, type Profile, profileById, PROFILES, profilesOf, similarity } from "../analog/scoring";
 import type { GlobeController } from "../globe/GlobeController";
 import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
 import { ChevronIcon } from "./icons";
 import { useGrid } from "./InfoCard";
 
-/** Names short enough for four to sit in one row. */
-const SHORT: Record<string, string> = {
-  "moon-south-pole": "Lunar pole",
-  "moon-tranquillitatis-pit": "Lunar pit",
-  "mars-jezero": "Jezero",
-  "mars-arcadia": "Arcadia",
-};
+const BODY_NAME: Record<Body, string> = { mars: "Mars", moon: "the Moon" };
+
+export const flyToProfile = (globe: GlobeController | null, p: Profile) =>
+  travel(globe, p.body, { lat: p.place.lat, lon: p.place.lon, span: 160_000, title: p.place.name, subtitle: `${p.body === "mars" ? "Mars" : "Moon"} · ${p.name}` });
 
 /**
- * The compact control on the left: which target Earth is compared with, the
- * mission goal, the similarity map and, folded away until asked for, the
- * ranked list of curated sites. It stays narrow so the whole-planet view is
- * never covered; reading happens in the card on the right.
+ * The compact control on the left: which body and which version of it Earth
+ * is compared with and, folded away until asked for, the ranked list of
+ * reference sites. Nothing on the globe is scored from here: a spot is scored
+ * from its own card, when its button is pressed. It stays
+ * narrow so the whole-planet view is never covered; reading happens in the
+ * card on the right.
  */
 export function TargetBar({ globe }: { globe: GlobeController | null }) {
   const { data, failed } = useAtlas();
   const atlas = useStore((s) => s.atlas);
-  const planet = useStore((s) => s.planet);
+  const onEarth = useStore((s) => s.planet) === "earth";
   const [newOnly, setNewOnly] = useState(false);
   const listId = useId();
-  const onEarth = planet === "earth";
+  const profile = profileById(atlas.profiles[atlas.body]);
 
-  const target = data?.targets.find((t) => t.id === atlas.targetId) ?? data?.targets[0] ?? null;
-  const weights = target ? weightsFor(target, atlas.presetId) : null;
-  const ranked = useMemo(() => (data && target && weights ? rank(data, target, weights) : []), [data, target, weights]);
-
-  // Dots on the globe: curated sites on Earth, targets on the Moon and Mars.
+  // Dots on the globe: curated sites on Earth, the profiles' reference regions on the Moon and Mars.
   useEffect(() => {
     if (!globe || !data) return;
     const pins =
       globe.planet.id === "earth"
         ? data.sites.map((s) => ({ lat: s.lat, lon: s.lon, active: s.id === atlas.siteId }))
-        : data.targets.filter((t) => t.body === globe.planet.id).map((t) => ({ lat: t.lat, lon: t.lon, active: t.id === atlas.targetId }));
+        : PROFILES.filter((p) => p.body === globe.planet.id).map((p) => ({ lat: p.place.lat, lon: p.place.lon, active: p.id === profile.id }));
     globe.setPins(pins);
-  }, [globe, data, atlas.siteId, atlas.targetId]);
+  }, [globe, data, atlas.siteId, profile.id]);
 
-  // The similarity map: every land cell scored against the selected target.
-  const wantMap = atlas.heatmap && onEarth;
-  const { grid, failed: gridFailed } = useGrid(wantMap);
-  // Scoring every cell for a new target takes a while, so it is asynchronous;
-  // until it finishes the previous map (and its legend) stays on screen.
-  const [heat, setHeat] = useState<Heatmap | null>(null);
-  useEffect(() => {
-    if (!wantMap || !grid || !data || !target || !weights) {
-      setHeat(null);
-      return;
-    }
-    let live = true;
-    renderHeatmap(grid, data, target, weights).then(
-      (h) => live && setHeat(h),
-      (error: unknown) => console.error(error),
-    );
-    return () => {
-      live = false;
-    };
-  }, [wantMap, grid, data, target, weights]);
-  useEffect(() => {
-    if (!globe || globe.planet.id !== "earth") return;
-    void globe.setHeatmap(heat?.canvas ?? null);
-  }, [globe, heat]);
+  // The grid is needed to rank the reference sites.
+  const { grid, failed: gridFailed } = useGrid(atlas.listOpen);
+
+  const ranked = useMemo(
+    () =>
+      data && grid && atlas.listOpen
+        ? data.sites.map((site) => ({ site, score: similarity(siteMeasures(grid, site).measures, profile) })).sort((a, b) => b.score - a.score)
+        : [],
+    [data, grid, atlas.listOpen, profile],
+  );
 
   if (!atlas.open) return null;
-  if (!data || !target) {
+  if (!data) {
     return (
       <aside className="targetbar panel" aria-label="Analog Atlas">
         <p className="atlas-empty">{failed ? "The analog dataset could not be loaded." : "Loading analog data…"}</p>
@@ -78,78 +59,40 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
     );
   }
 
-  const flyToTarget = (t: Target) => travel(globe, t.body, { lat: t.lat, lon: t.lon, span: 160_000, title: t.name, subtitle: t.region });
-
   return (
     <aside className="targetbar panel" aria-label="Analog Atlas">
-      <div className="atlas-eyebrow" id={`${listId}-target`}>
+      <div className="atlas-eyebrow" id={`${listId}-body`}>
         Compare Earth with
       </div>
-      <div className="targetbar-targets" role="radiogroup" aria-labelledby={`${listId}-target`}>
-        {data.targets.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="radio"
-            aria-checked={t.id === target.id}
-            aria-label={`${t.name}, ${t.body === "moon" ? "Moon" : "Mars"}`}
-            title={`${t.name} · ${t.region}`}
-            onClick={() => updateAtlas({ targetId: t.id })}
-          >
-            {SHORT[t.id] ?? t.name}
+      <div className="targetbar-targets" role="radiogroup" aria-labelledby={`${listId}-body`}>
+        {(["mars", "moon"] as Body[]).map((body) => (
+          <button key={body} type="button" role="radio" aria-checked={body === atlas.body} onClick={() => updateAtlas({ body })}>
+            {body === "mars" ? "Mars" : "Moon"}
           </button>
         ))}
       </div>
 
-      <div className="targetbar-target">
-        <span>
-          <strong>{target.name}</strong>
-          <span className="atlas-site-detail">{target.region}</span>
-        </span>
-        <button type="button" className="targetbar-link" onClick={() => flyToTarget(target)}>
-          Fly there
-        </button>
-      </div>
-
       <label className="targetbar-row">
-        <span>Mission goal</span>
-        <select value={atlas.presetId} onChange={(e) => updateAtlas({ presetId: e.target.value })}>
-          {PRESETS.map((p) => (
+        <span>Version</span>
+        <select value={profile.id} onChange={(e) => updateAtlas({ profiles: { ...atlas.profiles, [atlas.body]: e.target.value } })}>
+          {profilesOf(atlas.body).map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {p.name}
             </option>
           ))}
         </select>
       </label>
 
-      {onEarth && (
-        <button type="button" role="switch" aria-checked={atlas.heatmap} className="targetbar-row" onClick={() => updateAtlas({ heatmap: !atlas.heatmap })}>
-          <span>Similarity map</span>
-          <span className="switch" />
+      <div className="targetbar-target">
+        <span>
+          <span className="atlas-site-detail">{profile.summary}</span>
+        </span>
+        <button type="button" className="targetbar-link" onClick={() => flyToProfile(globe, profile)}>
+          Fly to {profile.place.name}
         </button>
-      )}
-      {wantMap && (
-        <div className="heat-legend">
-          {heat ? (
-            <>
-              <div className="heat-ramp" style={{ background: heatGradient() }} role="img" aria-label={`Colour scale from ${percent(HEAT_RANGE[0])} or less to ${percent(HEAT_RANGE[1])} or more overall similarity`} />
-              <div className="heat-ticks" aria-hidden="true">
-                <span>≤{percent(HEAT_RANGE[0])}</span>
-                <span>{percent((HEAT_RANGE[0] + HEAT_RANGE[1]) / 2)}</span>
-                <span>≥{percent(HEAT_RANGE[1])}</span>
-              </div>
-              <p>
-                Overall similarity of each 0.5° land cell (about 50 km) to {heat.target.name}. White dots are the curated sites.{" "}
-                <button type="button" className="targetbar-link" onClick={() => globe?.select(heat.best.lat, heat.best.lon, { span: 220_000 })}>
-                  Best cell: {percent(heat.best.score)} at {formatLat(heat.best.lat, 2)}, {formatLon(heat.best.lon, 2)}
-                </button>
-              </p>
-            </>
-          ) : (
-            <p>{gridFailed ? "The global grid could not be loaded." : "Loading the global grid…"}</p>
-          )}
-        </div>
-      )}
+      </div>
+
+      {onEarth && <p className="targetbar-hint">Click any spot on Earth, then press Score this spot.</p>}
 
       <button
         type="button"
@@ -158,7 +101,7 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
         aria-controls={listId}
         onClick={() => updateAtlas({ listOpen: !atlas.listOpen })}
       >
-        <span>{data.sites.length} curated sites, ranked</span>
+        <span>{data.sites.length} reference sites, ranked</span>
         <ChevronIcon />
       </button>
 
@@ -167,6 +110,7 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
           <button type="button" role="switch" aria-checked={newOnly} className="atlas-filter" onClick={() => setNewOnly((v) => !v)}>
             New sites only <span className="switch" />
           </button>
+          {!grid && <p className="atlas-foot">{gridFailed ? "The global grid could not be loaded." : "Loading the global grid…"}</p>}
           <ol className="atlas-list">
             {ranked.map((r, index) =>
               newOnly && r.site.known ? null : (
@@ -189,7 +133,10 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
               ),
             )}
           </ol>
-          <p className="atlas-foot">Seven dimensions measured from open data; the mission goal sets their weights. Data built {data.generated}.</p>
+          <p className="atlas-foot">
+            Similarity to {BODY_NAME[profile.body]} ({profile.name.toLowerCase()}): a weighted geometric mean of the metric groups, so one poor match pulls the whole score down. Data built{" "}
+            {data.generated}.
+          </p>
         </div>
       )}
     </aside>

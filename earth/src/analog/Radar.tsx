@@ -1,4 +1,4 @@
-import { type Dimension, type DimId, type DimScore, percent } from "./data";
+import { type Group, type GroupId, type GroupScore, percent } from "./data";
 
 const SIZE = 240;
 const CENTRE = SIZE / 2;
@@ -7,12 +7,12 @@ const REACH = 78;
 const MARGIN = 36;
 
 /**
- * Similarity of one Earth site to the target on every dimension. The outer
+ * Similarity of one place on Earth to the target on every metric group. The outer
  * ring is the target itself (identical on every axis); the filled shape is
  * how close the Earth site comes. A dimension with no data is drawn at the
  * centre and labelled "n/a".
  */
-export function Radar({ dimensions, scores }: { dimensions: Dimension[]; scores: Record<DimId, DimScore> }) {
+export function Radar({ dimensions, scores }: { dimensions: Group[]; scores: Record<GroupId, GroupScore> }) {
   const point = (index: number, radius: number): [number, number] => {
     const angle = (index / dimensions.length) * 2 * Math.PI - Math.PI / 2;
     return [CENTRE + Math.cos(angle) * radius, CENTRE + Math.sin(angle) * radius];
@@ -37,7 +37,7 @@ export function Radar({ dimensions, scores }: { dimensions: Dimension[]; scores:
         const anchor = Math.abs(x - CENTRE) < 8 ? "middle" : x > CENTRE ? "start" : "end";
         return (
           <text key={d.id} className={`radar-label${scores[d.id].score == null ? " is-missing" : ""}`} x={x} y={y} textAnchor={anchor} dominantBaseline="middle">
-            {d.label}
+            {d.short}
             {scores[d.id].score == null && " (n/a)"}
           </text>
         );
