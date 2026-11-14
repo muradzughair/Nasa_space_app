@@ -1,0 +1,38 @@
+PASS  without a headset: no "View in VR", a "!" instead
+PASS  with immersive-vr supported: "View in VR" in the top bar
+PASS  enter VR: renderer.xr presents and drawing runs through renderer.setAnimationLoop
+PASS  in VR the vertical exaggeration is 1 (real scale)  (exag 1)
+PASS  in VR the two-pane scissor is off
+PASS  in VR the shadow map follows the vr profile  (1024 px)
+PASS  reference space: local-floor (standing, floor at the ground)
+PASS  starts on the target ground: its scene is drawn and the label reads its title  (Mars ground: Jezero Crater · 3.71 m/s²)
+PASS  drawn from the headset camera inside the VR rig
+PASS  terrain level of detail updated from the headset each frame
+PASS  first VR start: the controls card is shown
+PASS  stand on site: placed beside the route near the rover  (30.6 m from the rover)
+PASS  the controls card closes and is remembered
+PASS  right A: play / pause
+PASS  left Y: switches to the Earth ground (scene and label)  (Earth: Test place · 9.81 m/s²)
+PASS  switching keeps the user at the same spot relative to the rover  (along 30.00 -> 30.00 m, across 6.00 -> 6.00 m)
+PASS  the data panel shows the shown side  (Earth ground · 1x | Speed: paused | Slope under the rover: 4.2° | Average wheel slip: 25 %)
+PASS  left Y again: back to the target ground
+PASS  both sides keep playing on the same timeline
+PASS  left X: follow mode
+PASS  follow keeps the horizon level (no pitch or roll of the view)
+PASS  left X again: stand on site
+PASS  right stick right: faster (1x -> 2x)
+PASS  right stick left twice: slower (2x -> 0.5x)
+PASS  right B: restart (back to the start, playing)  (u 0.0000)
+PASS  wrist menu: slip rings on
+PASS  the data panel warns STUCK where the run is blocked
+PASS  exit VR: animation loop cleared, renderer.xr off
+PASS  exit VR: the VR objects have left both scenes
+PASS  exit VR: the vertical exaggeration is restored  (2.5)
+PASS  exit VR: both cameras are where they were
+PASS  exit VR: scissor back, two-pane layout (both sides, same order), normal loop resumed
+PASS  exit VR: shadows back to the normal quality level
+PASS  exit VR: the "Viewing in VR" note leaves the page
+PASS  a second VR session starts again, without the controls card
+PASS  and ends cleanly
+
+all 36 passed
