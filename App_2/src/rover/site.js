@@ -45,7 +45,6 @@ export const TEMPLATE = `
   <div class="site-top">
     <button id="siteBack" class="btn ghost" aria-label="Back to the globe">&larr; Back to globe</button>
     <div id="siteTitle" class="site-title"></div>
-    <div id="siteBadges"></div>
     <div class="gfx-wrap"><button id="gfxBtn" class="btn ghost small" aria-expanded="false" aria-controls="gfxPop">Graphics</button><div id="gfxPop" class="gfx-pop hidden" role="dialog" aria-label="Graphics quality"></div></div>
   </div>
   <div id="siteNote" class="site-note hidden" role="alert"></div>
@@ -527,7 +526,7 @@ export function provenance(p) {
   return { cls: im && im.img && !e.synthetic_fine ? 'real' : 'part', short: `${el}. ${img}.${fine}${soil}`, long: [`Centre ${e.site_center[0].toFixed(5)}, ${e.site_center[1].toFixed(5)}. Fetched ${e.date_built.slice(0, 16).replace('T', ' ')} UTC (${(e.bytes / 1e6).toFixed(1)} MB of elevation tiles).`, `Heights relative to: ${e.datum}.`, ...(e.missing || []).map(m => 'Note: ' + m), 'Rocks are illustrative (rule-based, fixed seed): they are not mapped from the image and not in the height data, and the wheels do not feel them.'].join(' ') };
 }
 function fillLabels() {
-  const c = V.ctx, p = V.patch, pr = provenance(p);
+  const c = V.ctx;
   $('siteTitle').innerHTML = `<span class="r">${esc(c.place.name)}</span><span class="meta">${c.place.lat.toFixed(4)}, ${c.place.lon.toFixed(4)} &middot; 2 km patch, 10 km context &middot; target ${esc(c.target.name)}</span>`;
   const label = s => `${s.key === 'target' ? `At ${esc(c.target.bodyName)} gravity` : 'At Earth gravity'}<small>g ${s.g} m/s&sup2; &middot; same Earth ground</small>`;
   $('vpLeft').innerHTML = V.sides[0] ? label(V.sides[0]) : '';
@@ -535,7 +534,6 @@ function fillLabels() {
   const notes = ['real ground, north-up; the sun azimuth is a compass bearing', 'the close-up grain is a generic photo texture and the rocks are illustrative', 'beyond the outline is the real 10 km context ring at 62.5 m'];
   if (V.sides.length > 1) notes.unshift('both panes are the same Earth ground; only gravity differs');
   $('synthNote').textContent = notes.join(' · ') + '.';
-  $('siteBadges').innerHTML = `<span class="badge ok" title="${esc(pr.long)}">REAL TERRAIN: ${esc(p.prov.elevation_source_id.startsWith('glo90') ? 'GLO-90' : 'GLO-30')}</span><span class="badge" title="A screening model with simplified soil behaviour, not a validated rover simulation">SCREENING MODEL</span>`;
 }
 function row(k, v) { return `<tr><td>${esc(k)}</td><td class="n">${esc(v)}</td></tr>`; }
 function fillGround() {

@@ -36,9 +36,6 @@
 .rsim .top-right { display: flex; gap: var(--s3); align-items: center; margin-left: auto; flex: none; }
 .rsim .about-btn { display: inline-flex; align-items: center; gap: 7px; }
 .rsim .quality { position: relative; }
-.rsim .badge { display: inline-block; background: #3a1a1a; color: #fecaca; border: 1px solid #7f1d1d; border-radius: 999px; padding: 3px 10px; font-size: var(--t-xs); font-weight: 700; letter-spacing: .07em; }
-.rsim button.badge:hover { filter: brightness(1.2); }
-.rsim .badge.ok { background: #12341d; color: #bbf7d0; border-color: #166534; }
 .rsim .popover { position: absolute; left: 0; top: calc(100% + 8px); width: 360px; max-width: calc(100vw - 24px); background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); padding: var(--s3) var(--s4); box-shadow: 0 12px 40px rgba(0,0,0,.55); z-index: 60; font-size: var(--t-sm); }
 .rsim .popover.right { left: auto; right: 0; }
 .rsim .popover h4 { margin: 0 0 var(--s2); font-size: var(--t-sm); color: var(--text); }

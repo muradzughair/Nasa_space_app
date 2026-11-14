@@ -74,7 +74,7 @@ export async function openRoverSim(opts: SimOptions): Promise<SimHandle> {
   const handle: SimHandle = { close };
   open = handle;
 
-  root.innerHTML = `<div class="rs-load" role="status" aria-live="polite"><div class="rs-load-box"><div class="veil-kicker">Rover simulation · screening model</div><div class="rs-load-title">${esc(place.name)}</div><div class="rs-spin" aria-hidden="true"></div><div class="rs-load-sub" id="rsStatus">Preparing</div><button class="btn ghost" id="rsCancel">Back to globe</button></div></div>`;
+  root.innerHTML = `<div class="rs-load" role="status" aria-live="polite"><div class="rs-load-box"><div class="veil-kicker">Rover simulation</div><div class="rs-load-title">${esc(place.name)}</div><div class="rs-spin" aria-hidden="true"></div><div class="rs-load-sub" id="rsStatus">Preparing</div><button class="btn ghost" id="rsCancel">Back to globe</button></div></div>`;
   const status = (s: string) => {
     const el = root.querySelector("#rsStatus");
     if (el) el.textContent = s;
