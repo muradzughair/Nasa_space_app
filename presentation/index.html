@@ -1,0 +1,1611 @@
+<!doctype html>
+<!--
+  Analog Atlas: the pitch deck, on an interactive 3D Earth, Moon and Mars.
+  Open this file in Chrome, Edge, Firefox or Safari. It works offline as long as
+  the assets/ and vendor/ folders stay next to it (if the Earth textures or
+  three.js are missing, it loads them from the internet instead).
+  Edit the slides in the SLIDES list inside the <script type="module"> below.
+  assets/analog-cells.js holds real heatmap output of the app (src/ at the repository root);
+  assets/body-textures.js the NASA Trek Moon and Mars mosaics.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Analog Atlas</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<style>
+/* Layout: full-bleed globe; slide copy rides a glass panel in the left third
+   (a bottom sheet on phones); camera telemetry top right, slide track along the bottom.
+   Dark only, on purpose: it's space. */
+:root {
+  color-scheme: dark;
+  --void: #04060b;
+  --glass: rgba(7, 11, 20, 0.76);
+  --well: rgba(4, 7, 14, 0.78);
+  --edge: rgba(206, 220, 255, 0.14);
+  --line: rgba(206, 220, 255, 0.18);
+  --hatch: rgba(206, 220, 255, 0.035);
+  --ink: #edf0f6;
+  --ink-dim: #a3acbf;
+  --ink-faint: #7b859c;
+  --sun: #f2b257;   /* sunlight: markers, highlights, current slide */
+  --air: #8cc8ff;   /* atmosphere: orbits, secondary marks */
+  --ramp-0: #123e5c; --ramp-1: #2fa7c9; --ramp-2: #f2b257; --ramp-3: #fff0c9;
+  --font-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Archivo", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --gutter-l: max(28px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(28px, env(safe-area-inset-right, 0px));
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--void);
+  color: var(--ink);
+  font: 400 15px/1.55 var(--font-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--sun); outline-offset: 3px; }
+
+#globe { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#globe.dragging { cursor: grabbing; }
+
+/* ---------- map labels ---------- */
+#labels { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.label { position: absolute; left: 0; top: 0; opacity: 0; will-change: transform, opacity; }
+.label-stem { position: absolute; left: 0; bottom: 0; width: 1px; height: 46px; background: linear-gradient(to top, var(--sun), transparent); }
+.label-text {
+  position: absolute; left: 0; bottom: 46px; display: grid; gap: 3px; white-space: nowrap;
+  padding: 6px 9px 6px; background: var(--well); border: 1px solid var(--edge); border-left-color: var(--sun);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.label-text b { font: 600 13.5px/1.15 var(--font-display); font-stretch: 110%; }
+.label-text small { font: 400 10.5px/1.3 var(--font-mono); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.label-text em { font: 500 9.5px/1.3 var(--font-mono); font-style: normal; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); }
+.label--air .label-text { border-left-color: var(--air); }.label--air .label-stem { background: linear-gradient(to top, var(--air), transparent); }
+.label--air .label-text em { color: var(--air); }
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: fixed; z-index: 5; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 24px;
+  padding-top: calc(22px + env(safe-area-inset-top, 0px));
+  padding-left: var(--gutter-l); padding-right: var(--gutter-r);
+  pointer-events: none; transition: opacity .4s;
+}
+.topbar, .counter { text-shadow: 0 1px 10px rgba(0, 0, 0, .85), 0 0 2px rgba(0, 0, 0, .6); }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 30px; height: 30px; color: var(--sun); flex: none; }
+.brand-text { display: grid; gap: 2px; }
+.brand-name { font: 700 15px/1.1 var(--font-display); font-stretch: 118%; letter-spacing: .01em; }
+.brand-event { font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }
+.hud { display: flex; gap: 22px; margin: 0; font: 400 12px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; }
+.hud div { display: grid; gap: 4px; justify-items: end; }
+.hud dt { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); }
+.hud dd { margin: 0; color: var(--ink); }
+
+/* ---------- slide panel ---------- */
+.panel {
+  position: fixed; z-index: 4;
+  left: max(40px, env(safe-area-inset-left, 0px)); top: 50%; transform: translateY(-50%);
+  width: min(450px, 38vw);
+  background: var(--glass);
+  border: 1px solid var(--edge); border-radius: 3px;
+  -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3);
+  transition: opacity .28s ease;
+}
+.panel::before, .panel::after { content: ""; position: absolute; width: 12px; height: 12px; border: 0 solid var(--sun); pointer-events: none; }
+.panel::before { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
+.panel::after { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
+.panel.is-leaving { opacity: 0; }
+.panel-body {
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 30px 30px 28px;
+  max-height: calc(100vh - 196px); overflow: auto; scrollbar-width: thin;
+}
+.panel.hero {
+  top: auto; bottom: calc(112px + env(safe-area-inset-bottom, 0px)); transform: none;
+  width: min(760px, 54vw);
+  background: none; border-color: transparent;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.panel.hero::before, .panel.hero::after { display: none; }
+.panel.hero .panel-body { padding: 0; max-height: none; overflow: visible; gap: 22px; }
+.panel-body > * { margin: 0; animation: rise .7s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 70ms + 60ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.eyebrow { display: flex; align-items: center; gap: 10px; font: 500 11px/1.2 var(--font-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--sun); }
+.eyebrow::before { content: ""; width: 18px; height: 1px; background: currentColor; flex: none; }
+.title { font-family: var(--font-display); font-weight: 700; font-stretch: 118%; font-size: clamp(26px, 2.5vw, 38px); line-height: 1.04; letter-spacing: -.012em; text-wrap: balance; margin-top: -6px !important; }
+.hero .title { font-weight: 800; font-stretch: 125%; font-size: clamp(50px, 6.6vw, 104px); line-height: .9; letter-spacing: -.025em; text-shadow: 0 2px 28px var(--void); }
+.sub { font-size: clamp(16px, 1.35vw, 19px); line-height: 1.5; color: var(--ink-dim); max-width: 44ch; text-wrap: pretty; }
+.body { color: var(--ink-dim); max-width: 60ch; text-wrap: pretty; }
+.note { font: 400 12px/1.55 var(--font-mono); color: var(--ink-faint); }
+.tag { display: inline-block; vertical-align: middle; margin-left: 10px; padding: 3px 5px 2px; border: 1px solid currentColor; border-radius: 2px; font: 500 9.5px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
+
+.stat { display: grid; gap: 4px; padding-block: 10px 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.stat-value { margin: 0; display: flex; align-items: baseline; font-family: var(--font-display); font-weight: 200; font-size: clamp(64px, 7vw, 104px); line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.stat-unit { margin-left: 4px; font-size: .42em; font-weight: 400; letter-spacing: 0; color: var(--sun); }
+.stat-value .tag { align-self: center; letter-spacing: .14em; }
+.stat-caption { margin: 0; font-size: 13.5px; color: var(--ink-dim); }
+
+.bullets { list-style: none; padding: 0; display: grid; }
+.bullets li { display: grid; grid-template-columns: 22px 1fr; align-items: baseline; padding-block: 10px; border-top: 1px solid var(--line); }
+.bullets li:last-child { border-bottom: 1px solid var(--line); }
+.panel code { font: 400 .88em/1 var(--font-mono); color: var(--ink); }
+.bullets li::before { content: ""; width: 10px; height: 1px; background: var(--sun); transform: translateY(-4px); }
+
+.sources { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.sources li { display: grid; align-content: start; gap: 5px; padding: 14px 14px 13px; background: var(--well); min-width: 0; }
+.sources b { font: 600 14px/1.2 var(--font-display); font-stretch: 108%; }
+.sources span { font: 400 11px/1.45 var(--font-mono); color: var(--ink-dim); }
+
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { padding: 0 0 10px; text-align: left; font: 500 10px/1 var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); }
+.table th:last-child, .table td:last-child { text-align: right; }
+.table td { padding-block: 11px; border-top: 1px solid var(--line); }
+.num { display: inline-flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.bar { position: relative; width: 84px; height: 4px; background: var(--line); }
+.bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--v) * 100%); background: var(--sun); }
+
+.legend { display: grid; gap: 8px; }
+.legend-head { display: flex; justify-content: space-between; align-items: center; font: 500 10px/1 var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); }
+.legend-head .tag { margin: 0; }
+.ramp { height: 8px; background: linear-gradient(90deg, var(--ramp-0), var(--ramp-1) 35%, var(--ramp-2) 70%, var(--ramp-3)); }
+.legend-ends { display: flex; justify-content: space-between; font: 400 11px/1 var(--font-mono); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+
+.media { display: grid; gap: 10px; }
+.media-slot, .media img, .media video { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--edge); }
+.media-slot {
+  display: grid; place-content: center; justify-items: center; gap: 8px; padding: 16px; text-align: center;
+  border-style: dashed; border-color: var(--line); color: var(--ink-dim); font-size: 13px;
+  background: repeating-linear-gradient(135deg, transparent 0 10px, var(--hatch) 10px 20px);
+}
+.media-slot svg { width: 26px; height: 26px; color: var(--sun); }
+.media-slot code { font: 400 11px/1.4 var(--font-mono); color: var(--ink-faint); }
+.media figcaption { font-size: 13.5px; color: var(--ink-dim); }
+
+.team { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; }
+.team li { display: grid; grid-template-columns: 44px 1fr; align-items: center; gap: 12px; min-width: 0; }
+.avatar { width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--edge); border-radius: 50%; background: var(--well); color: var(--ink-faint); }
+.avatar svg { width: 22px; height: 22px; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.who { display: grid; gap: 2px; min-width: 0; }
+.who b { font: 600 14px/1.2 var(--font-display); font-stretch: 108%; }
+.who span { font: 400 11px/1.35 var(--font-mono); color: var(--ink-dim); }
+
+.meta { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 10px 18px; font: 500 11.5px/1.2 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+.meta li:not(:last-child) { padding-right: 18px; border-right: 1px solid var(--line); }
+
+.links { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; }
+.links dt { padding-top: 2px; font: 500 10.5px/1.6 var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); }
+.links dd { margin: 0; font: 400 14px/1.6 var(--font-mono); color: var(--ink); overflow-wrap: anywhere; }
+
+/* ---------- blocks added for the Analog Atlas deck ---------- */
+.panel.wide { width: min(560px, 44vw); }
+.stage { display: flex; gap: 4px; list-style: none; padding: 0; }
+.stage li { flex: 1; min-width: 0; display: grid; gap: 6px; font: 500 9px/1.2 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage li::before { content: ""; height: 2px; background: var(--line); }
+.stage li.on { color: var(--sun); }
+.stage li.on::before { background: var(--sun); }
+.stage li.past::before { background: var(--ink-faint); }
+
+.quote { margin: 0; padding: 4px 0 4px 16px; border-left: 2px solid var(--sun); display: grid; gap: 8px; }
+.quote p { margin: 0; font: 500 clamp(17px, 1.45vw, 21px)/1.35 var(--font-display); font-stretch: 105%; color: var(--ink); text-wrap: balance; }
+.quote cite { font: 400 11px/1.45 var(--font-mono); font-style: normal; color: var(--ink-dim); }
+
+.evidence { list-style: none; padding: 0; display: grid; }
+.evidence li { display: grid; grid-template-columns: minmax(0, auto) 1fr; gap: 4px 16px; align-items: baseline; padding-block: 12px; border-top: 1px solid var(--line); }
+.evidence li:last-child { border-bottom: 1px solid var(--line); }
+.evidence li.noval { grid-template-columns: 1fr; }
+.ev-value { grid-row: span 2; font: 300 clamp(30px, 2.6vw, 40px)/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.ev-value small { margin-left: 3px; font-size: .42em; font-weight: 400; letter-spacing: 0; color: var(--sun); }
+.ev-text { font-size: 14px; line-height: 1.5; color: var(--ink-dim); text-wrap: pretty; }
+.ev-text b { color: var(--ink); font-weight: 600; }
+.ev-cite { font: 400 10.5px/1.45 var(--font-mono); color: var(--ink-faint); }
+
+.stats { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.stats li { display: grid; align-content: start; gap: 6px; padding: 12px 12px 13px; background: var(--well); min-width: 0; }
+.stats b { font: 300 clamp(24px, 2.2vw, 32px)/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.stats b small { margin-left: 2px; font-size: .5em; font-weight: 400; color: var(--sun); letter-spacing: 0; }
+.stats span { font: 400 11px/1.4 var(--font-mono); color: var(--ink-dim); }
+
+.flow { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; counter-reset: flow; }
+.flow li { counter-increment: flow; display: flex; align-items: center; gap: 8px; padding: 7px 11px 7px 8px; border: 1px solid var(--edge); background: var(--well); font: 500 12.5px/1 var(--font-body); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.flow li::before { content: counter(flow, decimal-leading-zero); font: 500 10px/1 var(--font-mono); color: var(--sun); }
+
+.steps { list-style: none; padding: 0; display: grid; counter-reset: step; }
+.steps li { counter-increment: step; position: relative; display: grid; gap: 3px; padding: 0 0 16px 38px; }
+.steps li::before { content: counter(step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--sun); border-radius: 50%; font: 500 11px/1 var(--font-mono); color: var(--sun); background: var(--well); }
+.steps li::after { content: ""; position: absolute; left: 12px; top: 25px; bottom: 2px; width: 1px; background: var(--line); }
+.steps li:last-child { padding-bottom: 0; }
+.steps li:last-child::after { display: none; }
+.steps b { font: 600 15px/1.25 var(--font-display); font-stretch: 108%; }
+.steps span { font-size: 13.5px; line-height: 1.5; color: var(--ink-dim); }
+
+.bars { display: grid; gap: 10px; }
+.bars-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font: 500 10px/1.3 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
+.bars-head b { font: 300 30px/1 var(--font-display); letter-spacing: -.03em; color: var(--ink); text-transform: none; }
+.bars table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.bars td { padding-block: 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+.bars td.w { width: 44px; font: 400 11px/1 var(--font-mono); color: var(--ink-faint); text-align: right; padding-right: 14px; }
+.bars td.v { width: 150px; }
+.bars td.q { width: 70px; text-align: right; font: 500 9.5px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.bars td.q.est { color: var(--sun); }
+
+.table td small { display: block; margin-top: 2px; font: 400 10.5px/1.3 var(--font-mono); color: var(--ink-faint); }
+.table td.rank { font: 400 12px/1 var(--font-mono); color: var(--ink-dim); white-space: nowrap; }
+.table th.rank, .table td.rank { text-align: right; padding-left: 14px; }
+.table th:nth-child(2), .table td:nth-child(2) { text-align: right; }
+
+.qr-wrap { display: flex; align-items: center; gap: 22px; }
+.qr { flex: none; width: 168px; height: 168px; padding: 10px; background: #fff; border-radius: 4px; }
+.qr svg { display: block; width: 100%; height: 100%; }
+.qr-text { display: grid; gap: 6px; min-width: 0; }
+.qr-text b { font: 600 16px/1.2 var(--font-display); font-stretch: 108%; }
+.qr-text span { font: 400 12.5px/1.45 var(--font-mono); color: var(--ink-dim); overflow-wrap: anywhere; }
+.hero .qr-wrap { margin-top: 4px; }
+
+/* ---------- 7-slide deck: very wide panel, columns, user cards, cost ledger ---------- */
+.panel.xwide { width: min(900px, 64vw); }
+.panel.xwide .panel-body { gap: 16px; padding: 26px 28px 24px; }
+.cols { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); gap: 22px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.col > * { margin: 0; }
+.col-head { font: 500 10.5px/1.3 var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--sun); }
+.lead { font: 500 clamp(15px, 1.2vw, 17px)/1.45 var(--font-body); color: var(--ink); max-width: 70ch; text-wrap: pretty; }
+.lead b { color: var(--sun); font-weight: 600; }
+
+.cards { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.cards > li { display: grid; align-content: start; gap: 8px; padding: 14px 15px 15px; background: var(--well); min-width: 0; }
+.card-who { display: flex; align-items: baseline; gap: 10px; }
+.card-who b { font: 600 15.5px/1.2 var(--font-display); font-stretch: 108%; }
+.card-who span { font: 400 10.5px/1.3 var(--font-mono); color: var(--ink-faint); }
+.card-goal { font-size: 12.5px; line-height: 1.45; color: var(--ink-dim); font-style: italic; }
+.cards ol { margin: 0; padding: 0; list-style: none; counter-reset: c; display: grid; gap: 5px; }
+.cards ol li { counter-increment: c; display: grid; grid-template-columns: 18px 1fr; font-size: 12.5px; line-height: 1.42; color: var(--ink-dim); }
+.cards ol li::before { content: counter(c); font: 500 10px/1.6 var(--font-mono); color: var(--sun); }
+.cards ol li b { color: var(--ink); font-weight: 600; }
+
+.ledger { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ledger td { padding: 7px 0; border-top: 1px solid var(--line); vertical-align: baseline; }
+.ledger td:first-child { padding-right: 12px; }
+.ledger td small { display: block; margin-top: 2px; font: 400 10.5px/1.35 var(--font-mono); color: var(--ink-faint); }
+.ledger td.amt { text-align: right; white-space: nowrap; font: 500 14px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.ledger tr.total td { border-top: 1px solid var(--sun); padding-top: 9px; font-weight: 600; color: var(--ink); }
+.ledger tr.total td.amt { color: var(--sun); font-size: 16px; }
+.ledger caption { caption-side: top; text-align: left; padding-bottom: 8px; font: 500 10.5px/1.3 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); }
+
+.vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 12px 14px; background: var(--well); border: 1px solid var(--line); }
+.vs div { display: grid; gap: 4px; min-width: 0; }
+.vs b { font: 300 clamp(24px, 2.2vw, 32px)/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.vs .good b { color: var(--sun); }
+.vs span { font: 400 11px/1.4 var(--font-mono); color: var(--ink-dim); }
+.vs i { font: 500 10px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; font-style: normal; color: var(--ink-faint); }
+
+.panel .team { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.panel .team li { grid-template-columns: 34px 1fr; gap: 9px; }
+.panel .team .avatar { width: 34px; height: 34px; }
+
+@media (max-width: 1100px) { .panel.xwide { width: min(900px, 76vw); } }
+/* Big-screen type: everything scales with the viewport so it reads from the back of a room. */
+@media (min-width: 761px) {
+  .panel.wide { width: min(640px, 46vw); }
+  .panel.xwide { width: min(1060px, 68vw); }
+  .panel-body { max-height: calc(100vh - 170px); }
+  .panel.xwide .panel-body, .panel.wide .panel-body { gap: clamp(12px, 1.6vh, 20px); padding: clamp(22px, 3vh, 34px) clamp(24px, 2vw, 36px); }
+  .eyebrow { font-size: clamp(12px, .85vw, 15px); }
+  .panel:not(.hero) .title { font-size: clamp(30px, 2.7vw, 50px); line-height: 1.05; }
+  .lead { font-size: clamp(17px, 1.35vw, 24px); line-height: 1.45; }
+  .col-head { font-size: clamp(12px, .85vw, 15px); }
+  .col { gap: clamp(10px, 1.4vh, 16px); }
+  .evidence li { padding-block: clamp(10px, 1.5vh, 16px); gap: 6px 20px; }
+  .ev-value { font-size: clamp(38px, 3.4vw, 62px); }
+  .ev-text { font-size: clamp(16px, 1.2vw, 21px); line-height: 1.4; }
+  .ev-cite { font-size: clamp(11.5px, .78vw, 14px); }
+  .steps li { padding: 0 0 clamp(12px, 1.8vh, 20px) 46px; gap: 4px; }
+  .steps li::before { width: 30px; height: 30px; font-size: 13px; top: -2px; }
+  .steps li::after { left: 15px; top: 31px; }
+  .steps b { font-size: clamp(17px, 1.3vw, 23px); }
+  .steps span { font-size: clamp(15px, 1.1vw, 19px); }
+  .bullets li { font-size: clamp(16px, 1.2vw, 21px); padding-block: clamp(9px, 1.3vh, 14px); grid-template-columns: 26px 1fr; }
+  .flow li { font-size: clamp(14px, 1vw, 18px); padding: 9px 14px 9px 10px; }
+  .flow li::before { font-size: 12px; }
+  .sources li { padding: clamp(10px, 1.4vh, 16px) 14px; }
+  .sources b { font-size: clamp(15px, 1.1vw, 19px); }
+  .sources span { font-size: clamp(12px, .85vw, 15px); }
+  .table { font-size: clamp(15px, 1.1vw, 19px); }
+  .table th { font-size: clamp(10.5px, .75vw, 13px); }
+  .table td { padding-block: clamp(9px, 1.3vh, 14px); }
+  .table td.rank, .num { font-size: clamp(13px, .95vw, 17px); }
+  .ledger { font-size: clamp(15px, 1.1vw, 19px); }
+  .ledger td { padding: clamp(7px, 1vh, 11px) 0; }
+  .ledger td small { font-size: clamp(11.5px, .8vw, 14px); }
+  .ledger td.amt { font-size: clamp(16px, 1.15vw, 20px); }
+  .ledger tr.total td.amt { font-size: clamp(19px, 1.4vw, 25px); }
+  .vs { padding: clamp(10px, 1.5vh, 16px) 16px; }
+  .vs b { font-size: clamp(30px, 2.6vw, 46px); }
+  .vs span { font-size: clamp(12px, .85vw, 15px); }
+  .note { font-size: clamp(11.5px, .8vw, 14px); }
+  .qr { width: clamp(150px, 13vw, 230px); height: clamp(150px, 13vw, 230px); }
+  .qr-text b { font-size: clamp(17px, 1.3vw, 23px); }
+  .qr-text span { font-size: clamp(12px, .9vw, 16px); }
+  .label-text b { font-size: 15px; }
+  .label-text small { font-size: 11.5px; }
+  .label-text em { font-size: 10.5px; }
+}
+@media (max-width: 760px) {
+  .panel.xwide { width: auto; }
+  .cols, .cards { grid-template-columns: 1fr; }
+  .panel .team { grid-template-columns: 1fr 1fr; }
+  .vs { grid-template-columns: 1fr; }
+}
+
+/* ---------- hint, dock, loader ---------- */
+.hint {
+  position: fixed; z-index: 5; right: var(--gutter-r); bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  margin: 0; display: flex; align-items: center; gap: 18px; white-space: nowrap;
+  font: 400 11.5px/1 var(--font-mono); color: var(--ink-dim);
+  pointer-events: none; transition: opacity .6s;
+}
+.hint.is-off { opacity: 0; }
+.hint-touch { display: none; }
+@media (pointer: coarse) { .hint-mouse { display: none; } .hint-touch { display: inline; } }
+kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-right: 5px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; font: 500 11px/1 var(--font-mono); color: var(--ink); }
+
+.dock {
+  position: fixed; z-index: 6; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: 14px;
+  padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  padding-left: var(--gutter-l); padding-right: var(--gutter-r);
+  transition: opacity .4s;
+}
+.navbtn {
+  flex: none; width: 40px; height: 40px; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--edge); border-radius: 50%; background: var(--glass);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  cursor: pointer; transition: border-color .2s, color .2s, opacity .2s;
+}
+.navbtn svg { width: 16px; height: 16px; }
+.navbtn:hover:not(:disabled) { border-color: var(--sun); color: var(--sun); }
+.navbtn:disabled { opacity: .35; cursor: default; }
+.track { flex: 1; min-width: 0; height: 40px; display: flex; align-items: center; gap: 6px; }
+.track button { position: relative; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
+.track button::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--line); transition: background .3s; }
+.track button.done::before { background: var(--ink-faint); }
+.track button:hover::before { background: var(--ink-dim); }
+.track button.current::before { height: 3px; margin-top: -1.5px; background: var(--sun); }
+.track button::after {
+  content: attr(data-title); position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+  padding: 7px 9px; white-space: nowrap; font: 400 11px/1 var(--font-mono); color: var(--ink);
+  background: var(--well); border: 1px solid var(--edge); opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.track button.tip-start::after { left: 0; transform: none; }
+.track button.tip-end::after { left: auto; right: 0; transform: none; }
+.track button:hover::after, .track button:focus-visible::after { opacity: 1; }
+.counter { flex: none; font: 400 12px/1 var(--font-mono); letter-spacing: .06em; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.counter b { font-weight: 500; color: var(--ink); }
+body.chrome-off .topbar, body.chrome-off .dock, body.chrome-off .hint { opacity: 0; pointer-events: none; }
+
+.loader { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: var(--void); transition: opacity .9s ease; }
+.loader.done { opacity: 0; pointer-events: none; }
+.loader-inner { display: grid; justify-items: center; gap: 12px; padding: 0 24px; text-align: center; font: 400 11.5px/1.5 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }
+.loader-track { width: 180px; height: 1px; background: var(--line); overflow: hidden; }
+.loader-bar { display: block; height: 100%; background: var(--sun); transform-origin: left; transform: scaleX(.04); transition: transform .4s; }
+.loader-count { font-size: 10.5px; color: var(--ink-faint); }
+
+.toast {
+  position: fixed; z-index: 7; top: calc(78px + env(safe-area-inset-top, 0px)); right: var(--gutter-r);
+  max-width: min(360px, calc(100% - 56px)); margin: 0; padding: 10px 12px;
+  font: 400 12px/1.45 var(--font-mono); color: var(--ink); background: var(--well); border: 1px solid var(--edge);
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 760px) {
+  :root { --gutter-l: max(16px, env(safe-area-inset-left, 0px)); --gutter-r: max(16px, env(safe-area-inset-right, 0px)); }
+  .topbar { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+  .panel { left: var(--gutter-l); right: var(--gutter-r); width: auto; top: auto; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); transform: none; }
+  .panel-body { padding: 20px 18px 18px; gap: 14px; max-height: 46vh; }
+  .panel.hero { width: auto; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .hero .title { font-size: clamp(44px, 13vw, 72px); }
+  .stat-value { font-size: 60px; }
+  .dock { gap: 10px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .navbtn { width: 38px; height: 38px; }
+  .track { gap: 3px; }
+  .hint { display: none; }
+  .toast { top: calc(64px + env(safe-area-inset-top, 0px)); }
+}
+@media (max-width: 760px) {
+  .panel.wide { width: auto; }
+  .stats li { padding: 10px 8px; }
+  .bars td.v { width: 96px; }
+  .qr { width: 132px; height: 132px; }
+  .stage li { font-size: 0; gap: 0; }
+}
+@media (max-width: 560px) { .hud .hud-ll { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .panel-body > * { animation: none; }
+  .panel, .loader { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="globe" aria-label="Interactive 3D globe of Earth, the Moon or Mars. Drag to rotate, scroll or pinch to zoom."></canvas>
+<div id="labels" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <ellipse cx="16" cy="16" rx="14" ry="5" fill="none" stroke="currentColor" stroke-width="1" opacity=".7" transform="rotate(-24 16 16)"/>
+      <circle cx="28.2" cy="10.7" r="1.8" fill="currentColor"/>
+    </svg>
+    <div class="brand-text"><span class="brand-name" id="brandName"></span><span class="brand-event" id="brandEvent"></span></div>
+  </div>
+  <dl class="hud" aria-label="Camera position">
+    <div><dt>Body</dt><dd id="hudBody">&mdash;</dd></div>
+    <div class="hud-ll"><dt>Lat</dt><dd id="hudLat">&mdash;</dd></div>
+    <div class="hud-ll"><dt>Lon</dt><dd id="hudLon">&mdash;</dd></div>
+    <div><dt>Altitude</dt><dd id="hudAlt">&mdash;</dd></div>
+  </dl>
+</header>
+
+<main id="panel" class="panel hero" aria-live="polite">
+  <div class="panel-body" id="panelBody"></div>
+</main>
+
+<p class="hint" id="hint">
+  <span class="hint-mouse"><kbd>&rarr;</kbd>next &nbsp; <kbd>&larr;</kbd>back</span>
+  <span class="hint-mouse">Drag to rotate &middot; scroll to zoom</span>
+  <span class="hint-mouse"><kbd>F</kbd>full screen &nbsp; <kbd>H</kbd>hide controls</span>
+  <span class="hint-touch">Drag to rotate &middot; pinch to zoom</span>
+</p>
+
+<nav class="dock" aria-label="Slides">
+  <button class="navbtn" id="prev" type="button" aria-label="Previous slide">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+  </button>
+  <button class="navbtn" id="next" type="button" aria-label="Next slide">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+  </button>
+  <div class="track" id="track"></div>
+  <span class="counter" id="counter"></span>
+  <button class="navbtn" id="fs" type="button" aria-label="Toggle full screen">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
+  </button>
+</nav>
+
+<div class="loader" id="loader" role="status">
+  <div class="loader-inner">
+    <span class="loader-label" id="loaderLabel">Loading Earth, Moon and Mars imagery</span>
+    <span class="loader-track"><span class="loader-bar" id="loaderBar"></span></span>
+    <span class="loader-count" id="loaderCount">0 of 5</span>
+  </div>
+</div>
+<p class="toast" id="toast" hidden></p>
+
+<script src="vendor/three.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="assets/earth-textures.js"></script>
+<script src="assets/body-textures.js"></script>
+<script src="assets/analog-cells.js"></script>
+<script type="module">
+// Local copy first (works offline); the same version from the internet if the vendor/ folder is missing.
+const THREE = window.THREE ?? await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
+
+/* =====================================================================
+   EDIT YOUR DECK HERE
+   ---------------------------------------------------------------------
+   Every slide flies the camera to its `view`:
+     lat, lon   degrees (south and west are negative)
+     dist       camera distance from that point, in radii of the body
+                (3 or more shows the whole globe, 0.4 is close)
+     tilt       0 looks straight down, 60 looks toward the horizon
+     heading    compass direction the camera faces (0 = north)
+
+   Optional scene settings per slide:
+     world: 'earth' | 'moon' | 'mars'     which globe (default earth)
+     layout: 'hero'                       big title, no panel box
+     wide: true | xwide: true             wider panel (xwide holds two columns)
+     sun: 'day' | 'dusk' | 'night'        lighting on the target
+     spin: true                           slow rotation while you talk
+     clouds: 0 to 1                       cloud cover on Earth (default 1)
+     markers: [{ lat, lon, label, note }] pins with labels
+     ring:    { lat, lon, radius, label } dashed circle, radius in degrees
+     data:    { cells, max, peak }        3D columns of real model output
+     orbit:   true                        example satellite orbit
+
+   Text blocks (all optional): eyebrow, title, lead, flow, vs, sub, quote,
+   stat, stats, body, evidence, ledger, cards, columns (each column takes
+   the same blocks plus `head`), steps, bullets, chips, places, legend,
+   media, team, meta, links, qr, note. Plain HTML is allowed.
+
+   The spoken script is in SCRIPT.md next to this file.
+   ===================================================================== */
+const DECK = {
+  name: 'Analog Atlas',
+  event: 'NASA Space Apps Challenge 2026',
+  // What the QR code on the last slide opens. Put the deployed demo here when there is one.
+  qr: 'https://github.com/muradzughair/Nasa_space_app',
+};
+
+// Real heatmap output (top 2% of land cells), from assets/analog-cells.js.
+const CELLS = window.ANALOG_CELLS ?? { landCells: 92172, moonMaria: { cells: [] }, marsModern: { cells: [] } };
+const STAGES = ['Target', 'Compare', 'Explain', 'Shortlist', 'Verify', 'Review'];
+
+const SLIDES = [
+  /* 1 ---------- the problem, simply ---------- */
+  {
+    id: 'problem', wide: true,
+    view: { lat: 30, lon: -62, dist: 2.9, tilt: 6 },
+    markers: [
+      { lat: 75.38, lon: -89.67, label: 'Haughton crater, Arctic Canada', note: 'Mars and Moon analog' },
+      { lat: 35.2, lon: -111.65, label: 'Arizona lava fields', note: 'NASA field tests' },
+      { lat: -24.08, lon: -69.92, label: 'Atacama Desert, Chile', note: 'Mars analog' },
+      { lat: 37.72, lon: -6.55, label: 'Río Tinto, Spain', note: 'Mars analog' },
+    ],
+    eyebrow: 'Analog Atlas · The problem',
+    title: 'Before we explore the Moon and Mars, we rehearse on Earth',
+    lead: 'NASA tests rovers, instruments and crews at <b>analog sites</b>: places on Earth that resemble the Moon or Mars. The right site decides what a test proves.',
+    steps: [
+      { name: 'Candidate sites are found with satellite data' },
+      { name: 'Satellites miss what matters at ground level' },
+      { name: 'Checking a site means sending people: slow and costly' },
+    ],
+  },
+
+  /* 2 ---------- the evidence ---------- */
+  {
+    id: 'evidence', wide: true, clouds: 0.25,
+    view: { lat: 36.6, lon: -6.6, dist: 0.42, tilt: 40, heading: 6 },
+    ring: { lat: 37.75, lon: -6.75, radius: 0.25, label: false },
+    markers: [{ lat: 37.72, lon: -6.55, label: 'Río Tinto', note: 'Dashed circle: one 50 km data cell' }],
+    eyebrow: 'The evidence',
+    title: 'The data proves it',
+    evidence: [
+      { value: '5%', text: 'Río Tinto, a classic Mars analog, scores only 5% in a satellite-based model. Its acid river is invisible in a 50 km data cell.', cite: 'Fernández-Remolar et al. 2005 · our model' },
+      { value: '33', text: 'analog sites reviewed, with <b>no clearly defined criteria</b> for choosing or evaluating them.', cite: 'Preston & Dartnell 2014' },
+      { value: '€32.40', text: 'per point for a professional field check, in the EU’s own land survey.', cite: 'Laso Bayas et al. 2020' },
+    ],
+  },
+
+  /* 3 ---------- the solution ---------- */
+  {
+    id: 'solution', xwide: true, clouds: 0.1,
+    view: { lat: 21.5, lon: 40.5, dist: 0.95, tilt: 40, heading: -12 },
+    data: { cells: CELLS.moonMaria.cells, max: 0.6, peak: { label: 'Harrat Lunayyir', note: 'Best match for the lunar maria' } },
+    eyebrow: 'Our solution',
+    title: 'Analog Atlas finds the site, checks it with locals, and fixes the data',
+    flow: ['Pick a Moon or Mars target', 'Score all of Earth', 'Verify with locals', 'Correct the record'],
+    columns: [
+      {
+        head: 'Driven by NASA data',
+        chips: [
+          { name: 'MODIS', desc: 'Temperature, vegetation' },
+          { name: 'NASA POWER', desc: 'Rain, air, sunlight' },
+          { name: 'LRO LOLA', desc: 'Moon terrain' },
+          { name: 'MGS MOLA', desc: 'Mars terrain' },
+        ],
+      },
+      {
+        head: 'Tested on 92,172 places on Earth',
+        places: {
+          label: 'Score',
+          rows: [
+            { name: 'Craters of the Moon · Moon', value: 0.54, rank: 'top 0.1%' },
+            { name: 'Atacama, Chile · Mars', value: 0.29, rank: 'top 0.5%' },
+            { name: 'Amazon rainforest · Mars', value: 0.03, rank: 'bottom 1%' },
+          ],
+        },
+      },
+    ],
+  },
+
+  /* 4 ---------- the loop ---------- */
+  {
+    id: 'loop', wide: true, clouds: 0,
+    view: { lat: 24.0, lon: 38.0, dist: 0.5, tilt: 40, heading: 15 },
+    markers: [{ lat: 25.25, lon: 37.75, label: 'Harrat Lunayyir, Saudi Arabia', note: 'Shortlisted · request open' }],
+    eyebrow: 'How it works',
+    title: 'The loop',
+    steps: [
+      { name: 'Researcher sends a verification request', desc: 'Questions are drafted from the weakest data.' },
+      { name: 'Local contributors check it', desc: 'They watch the rover walkthrough and correct the data, with photos.' },
+      { name: 'Researcher reviews', desc: 'Accepts the evidence or asks for more.' },
+      { name: 'Rover test team tests the ground', desc: 'In the simulator, before anyone travels.' },
+    ],
+  },
+
+  /* 5 ---------- the rover ---------- */
+  {
+    id: 'rover', xwide: true, world: 'mars', sun: 'day',
+    view: { lat: -11, lon: 160, dist: 2.2, tilt: 8 },
+    markers: [{ lat: -14.6, lon: 175.5, label: 'Troy, Gusev crater', note: 'Spirit stuck in soft soil, 2009' }],
+    eyebrow: 'The rover simulator',
+    title: 'Why a rover? Ground mistakes are expensive',
+    lead: '<b>Spirit</b> got stuck in soft soil on Mars in 2009 and never drove out. JPL rebuilt that soil on Earth to plan its escape.',
+    columns: [
+      {
+        head: 'What it does',
+        bullets: [
+          'Real ground, anywhere on Earth',
+          'NASA rover models: Perseverance, Curiosity, a lunar rover',
+          'Earth vs Mars or Moon gravity, side by side',
+        ],
+      },
+      {
+        head: 'Who uses it',
+        bullets: [
+          '<b>Locals</b> check the landscape',
+          '<b>Researchers</b> screen sites',
+          '<b>Test teams</b> plan routes',
+        ],
+      },
+    ],
+  },
+
+  /* 6 ---------- impact and money ---------- */
+  {
+    id: 'impact', xwide: true, sun: 'night', clouds: 0.4, spin: true,
+    view: { lat: 28, lon: 12, dist: 2.7, tilt: 8 },
+    eyebrow: 'Impact and cost',
+    title: 'A year of Analog Atlas costs less than one site visit',
+    columns: [
+      {
+        head: 'Running cost per month',
+        ledger: {
+          rows: [
+            { item: 'Hosting and domain', note: 'Cloudflare', amount: '$1' },
+            { item: 'Database and accounts', note: 'Supabase', amount: '$25' },
+            { item: 'Videos and photos', note: 'Cloudflare R2', amount: '≤ $2' },
+            { item: 'Scoring and rover', note: 'runs on the user’s device', amount: '$0' },
+            { item: 'Total', note: '≈ $340 a year', amount: '≈ $28', total: true },
+          ],
+        },
+      },
+      {
+        head: 'What it replaces',
+        vs: { a: { value: '$28', label: 'a month for Analog Atlas' }, b: { value: '$1,780', label: 'one site visit: 2 people, 5 days, before flights' } },
+        evidence: [
+          { value: '92%', text: 'cheaper per check with local volunteers: €2.60 vs €32.40.' },
+          { value: '2.3 t', text: 'of CO₂ saved per person for every flight avoided.' },
+        ],
+      },
+    ],
+    note: 'Sources: Cloudflare and Supabase prices (2026); US GSA per diem FY2026; Laso Bayas et al. 2020; UK DESNZ 2025.',
+  },
+
+  /* 7 ---------- what next ---------- */
+  {
+    id: 'next', xwide: true, world: 'mars', sun: 'day',
+    view: { lat: 12, lon: 70, dist: 2.3, tilt: 6 },
+    markers: [{ lat: 18.44, lon: 77.45, label: 'Jezero crater', note: 'Next: any Mars point as a target' }],
+    eyebrow: 'What’s next',
+    title: 'Next: choose any spot on Mars',
+    columns: [
+      {
+        bullets: [
+          '<b>Any Mars location</b> as a target, as on the Moon today',
+          '<b>Shared backend</b> with accounts and moderation',
+          '<b>Rover ground</b> on the Moon and Mars',
+          '<b>Mineral maps</b> from NASA EMIT',
+        ],
+      },
+      {
+        qr: { url: DECK.qr, label: 'Scan to try Analog Atlas' },
+      },
+    ],
+  },
+];
+
+/* =====================================================================
+   Engine. You shouldn't need to change anything below to make a deck.
+   ===================================================================== */
+const TEX = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/textures/planets/';
+// Per world: radius for the altitude readout, how much Earth-only shading applies (clouds, sea glint,
+// city lights), relief taken from the colour map, and the atmosphere's tint and strength.
+const BODY = {
+  earth: { name: 'Earth', km: 6371, earth: 1, bump: 0.006, atmo: [0.32, 0.6, 1.0], atmoAmt: 1 },
+  moon: { name: 'Moon', km: 1737.4, earth: 0, bump: 0.012, atmo: [0.6, 0.65, 0.75], atmoAmt: 0 },
+  mars: { name: 'Mars', km: 3389.5, earth: 0, bump: 0.008, atmo: [0.95, 0.6, 0.4], atmoAmt: 0.3 },
+};
+const SUN_ANGLE = { day: 0.8, dusk: 1.5, night: 2.35 };
+const ATMO_R = 1.075;         // atmosphere shell radius (Earth = 1)
+const COLOR_SUN = new THREE.Color('#f2b257');
+const COLOR_AIR = new THREE.Color('#8cc8ff');
+const RAMP = [[0, '#123e5c'], [0.35, '#2fa7c9'], [0.7, '#f2b257'], [1, '#fff0c9']].map(([t, c]) => [t, new THREE.Color(c)]);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const mqPhone = matchMedia('(max-width: 760px)');
+
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const damp = (a, b, rate, dt) => lerp(a, b, 1 - Math.exp(-rate * dt));
+const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const wrapLon = l => ((((l + 180) % 360) + 360) % 360) - 180;
+const plain = html => html.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '');
+const fmtLat = v => `${Math.abs(v).toFixed(2).padStart(5, '0')}° ${v >= 0 ? 'N' : 'S'}`;
+const fmtLon = v => `${Math.abs(v).toFixed(2).padStart(6, '0')}° ${v >= 0 ? 'E' : 'W'}`;
+const fmtVal = v => Number(v).toFixed(2);
+const fmtPct = v => `${Math.round(Number(v) * 100)}%`;
+
+function llToVec(lat, lon, r = 1, out = new THREE.Vector3()) {
+  const la = lat * D2R, lo = lon * D2R;
+  return out.set(Math.cos(la) * Math.cos(lo) * r, Math.sin(la) * r, -Math.cos(la) * Math.sin(lo) * r);
+}
+function vecToLL(v) {
+  const n = v.clone().normalize();
+  return { lat: Math.asin(clamp(n.y, -1, 1)) * R2D, lon: Math.atan2(-n.z, n.x) * R2D };
+}
+// Surface normal plus local north and east at a point.
+function frameAt(lat, lon) {
+  const la = lat * D2R, lo = lon * D2R;
+  return {
+    n: new THREE.Vector3(Math.cos(la) * Math.cos(lo), Math.sin(la), -Math.cos(la) * Math.sin(lo)),
+    north: new THREE.Vector3(-Math.sin(la) * Math.cos(lo), Math.cos(la), Math.sin(la) * Math.sin(lo)),
+    east: new THREE.Vector3(-Math.sin(lo), 0, -Math.cos(lo)),
+  };
+}
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function rampColor(v, out) {
+  for (let i = 1; i < RAMP.length; i++) {
+    if (v <= RAMP[i][0]) {
+      const [t0, c0] = RAMP[i - 1], [t1, c1] = RAMP[i];
+      return out.copy(c0).lerp(c1, (v - t0) / (t1 - t0));
+    }
+  }
+  return out.copy(RAMP[RAMP.length - 1][1]);
+}
+
+/* ---------- renderer ---------- */
+const $ = id => document.getElementById(id);
+const canvas = $('globe');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (err) {
+  $('loaderLabel').textContent = 'This presentation needs WebGL. Open it in a recent Chrome, Edge, Firefox or Safari.';
+  $('loaderCount').hidden = true;
+  throw err;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x04060b, 1);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 3000);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+/* ---------- textures ---------- */
+const manager = new THREE.LoadingManager();
+const texLoader = new THREE.TextureLoader(manager);
+const failed = [];
+const LOCAL_TEX = window.ORBIT_DECK_TEXTURES || {};   // from assets/earth-textures.js
+function loadTex(file, srgb, key) {
+  const t = texLoader.load(LOCAL_TEX[key] || TEX + file, undefined, undefined, () => failed.push(file));
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAniso;
+  return t;
+}
+const F_DAY = 'earth_day_4096.jpg', F_NIGHT = 'earth_night_4096.jpg', F_BRC = 'earth_bump_roughness_clouds_4096.jpg';
+const dayTex = loadTex(F_DAY, true, 'day');
+const nightTex = loadTex(F_NIGHT, true, 'night');
+const brcTex = loadTex(F_BRC, false, 'brc'); // R = relief, G = roughness (water is smooth), B = clouds
+brcTex.wrapS = THREE.RepeatWrapping;
+// Moon and Mars: NASA Trek mosaics embedded in assets/body-textures.js (no internet copy).
+const BODY_TEX = window.ORBIT_DECK_BODIES || {};
+const bodyTex = {};
+for (const key of ['moon', 'mars']) {
+  if (!BODY_TEX[key]) continue;
+  const t = texLoader.load(BODY_TEX[key], undefined, undefined, () => { failed.push(key); delete bodyTex[key]; });
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = maxAniso;
+  bodyTex[key] = t;
+}
+
+/* ---------- Earth, clouds, atmosphere, stars ---------- */
+const sunDir = new THREE.Vector3(1, 0.3, 0.5).normalize();
+const shared = { sunDir: { value: sunDir }, cloudShift: { value: 0 }, cloudAmount: { value: 1 }, fade: { value: 1 } };
+
+const SPHERE_VS = /* glsl */`
+  varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+  void main() {
+    vUv = uv;
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vP = wp.xyz;
+    vN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }`;
+
+const earthMat = new THREE.ShaderMaterial({
+  uniforms: {
+    ...shared, dayMap: { value: dayTex }, nightMap: { value: nightTex }, brcMap: { value: brcTex }, bumpMap: { value: brcTex },
+    bumpScale: { value: 0.006 }, earthAmt: { value: 1 }, atmoTint: { value: new THREE.Color(0.32, 0.6, 1.0) }, atmoAmt: { value: 1 },
+  },
+  vertexShader: SPHERE_VS,
+  fragmentShader: /* glsl */`
+    uniform sampler2D dayMap, nightMap, brcMap, bumpMap;
+    uniform vec3 sunDir, atmoTint; uniform float cloudShift, cloudAmount, bumpScale, earthAmt, atmoAmt, fade;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+
+    // Earth: relief channel of the brc map. Moon and Mars: brightness of the mosaic itself.
+    float height(vec2 uv) { vec3 t = texture2D(bumpMap, uv).rgb; return mix(dot(t, vec3(0.3, 0.55, 0.15)), t.r, earthAmt); }
+    vec3 bumpNormal(vec3 n) {
+      vec2 dx = dFdx(vUv), dy = dFdy(vUv);
+      float h0 = height(vUv);
+      vec2 dH = vec2(height(vUv + dx) - h0, height(vUv + dy) - h0) * bumpScale;
+      vec3 sx = dFdx(vP), sy = dFdy(vP);
+      vec3 r1 = cross(sy, n), r2 = cross(n, sx);
+      float det = dot(sx, r1);
+      vec3 grad = sign(det) * (dH.x * r1 + dH.y * r2);
+      return normalize(abs(det) * n - grad);
+    }
+
+    void main() {
+      vec3 n = normalize(vN);
+      vec3 L = normalize(sunDir);
+      vec3 V = normalize(cameraPosition - vP);
+      float sunGeo = dot(n, L);
+      float dayMix = smoothstep(-0.10, 0.30, sunGeo);
+
+      vec4 brc = texture2D(brcMap, vUv);
+      float cloud = smoothstep(0.2, 1.0, texture2D(brcMap, vUv + vec2(cloudShift, 0.0)).b) * cloudAmount * earthAmt;
+      float water = (1.0 - smoothstep(0.05, 0.35, brc.g)) * earthAmt;
+
+      vec3 day = texture2D(dayMap, vUv).rgb;
+      float diffuse = clamp(dot(bumpNormal(n), L), 0.0, 1.0);
+      vec3 col = day * (diffuse * mix(1.25, 1.1, earthAmt) + 0.012) * (1.0 - cloud * 0.4);
+
+      vec3 H = normalize(L + V);
+      float nh = max(dot(n, H), 0.0);
+      col += vec3(1.0, 0.9, 0.75) * pow(nh, 160.0) * water * (1.0 - cloud) * 0.2 * dayMix;
+      col += vec3(0.35, 0.55, 0.9) * pow(nh, 14.0) * water * 0.03 * dayMix;
+
+      vec3 lights = texture2D(nightMap, vUv).rgb;
+      col += lights * vec3(1.0, 0.76, 0.46) * 2.4 * (1.0 - dayMix) * (1.0 - cloud * 0.7) * earthAmt;
+
+      float rim = pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 3.0);
+      vec3 atmo = mix(vec3(1.0, 0.5, 0.25), atmoTint, smoothstep(-0.1, 0.45, sunGeo));
+      col += atmo * rim * smoothstep(-0.12, 0.5, sunGeo) * 1.1 * atmoAmt;
+
+      gl_FragColor = vec4(col * fade, 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 192, 96), earthMat);
+scene.add(earth);
+
+const cloudMat = new THREE.ShaderMaterial({
+  uniforms: { ...shared, brcMap: { value: brcTex } },
+  vertexShader: SPHERE_VS,
+  fragmentShader: /* glsl */`
+    uniform sampler2D brcMap; uniform vec3 sunDir; uniform float cloudShift, cloudAmount, fade;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+    void main() {
+      float c = smoothstep(0.2, 1.0, texture2D(brcMap, vUv + vec2(cloudShift, 0.0)).b) * cloudAmount * fade;
+      float s = dot(normalize(vN), normalize(sunDir));
+      float light = smoothstep(-0.12, 0.4, s);
+      vec3 col = mix(vec3(1.0, 0.72, 0.5), vec3(1.0), smoothstep(0.05, 0.35, s)) * (0.03 + 0.97 * light);
+      gl_FragColor = vec4(col, c * (0.15 + 0.85 * light));
+      #include <colorspace_fragment>
+    }`,
+  transparent: true, depthWrite: false,
+});
+const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.006, 160, 80), cloudMat);
+clouds.renderOrder = 1;
+scene.add(clouds);
+
+const atmoMat = new THREE.ShaderMaterial({
+  uniforms: { sunDir: shared.sunDir, fade: shared.fade, atmoTint: earthMat.uniforms.atmoTint, atmoAmt: earthMat.uniforms.atmoAmt, edge: { value: Math.sqrt(1 - 1 / (ATMO_R * ATMO_R)) } },
+  vertexShader: SPHERE_VS,
+  fragmentShader: /* glsl */`
+    uniform vec3 sunDir, atmoTint; uniform float edge, fade, atmoAmt;
+    varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+    void main() {
+      vec3 n = normalize(vN);
+      float d = dot(n, normalize(vP - cameraPosition));   // 0 at the outer rim, 'edge' at the planet's limb
+      float glow = pow(clamp(d / edge, 0.0, 1.0), 2.2);
+      float s = dot(n, normalize(sunDir));
+      vec3 col = mix(vec3(1.0, 0.45, 0.2), atmoTint, smoothstep(-0.15, 0.4, s));
+      gl_FragColor = vec4(col * 1.25, glow * smoothstep(-0.25, 0.35, s) * atmoAmt * fade);
+      #include <colorspace_fragment>
+    }`,
+  side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+});
+const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(ATMO_R, 96, 48), atmoMat);
+atmosphere.renderOrder = 2;
+scene.add(atmosphere);
+
+// Switch the globe to another world. The same sphere is reused; only its maps and shading change.
+let currentBody = 'earth';
+function setBody(key) {
+  if (key !== 'earth' && !bodyTex[key]) key = 'earth';   // texture file missing: stay on Earth
+  const B = BODY[key], u = earthMat.uniforms;
+  currentBody = key;
+  u.dayMap.value = key === 'earth' ? dayTex : bodyTex[key];
+  u.bumpMap.value = key === 'earth' ? brcTex : bodyTex[key];
+  u.bumpScale.value = B.bump;
+  u.earthAmt.value = B.earth;
+  u.atmoTint.value.setRGB(...B.atmo);
+  u.atmoAmt.value = B.atmoAmt;
+  clouds.visible = key === 'earth';
+  atmosphere.visible = B.atmoAmt > 0;
+}
+
+const starMat = (() => {
+  const N = 5200, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), size = new Float32Array(N);
+  const rng = mulberry32(42), v = new THREE.Vector3(), c = new THREE.Color();
+  for (let i = 0; i < N; i++) {
+    v.set(rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1);
+    if (v.lengthSq() > 1 || v.lengthSq() < 1e-4) { i--; continue; }
+    v.normalize().multiplyScalar(1200).toArray(pos, i * 3);
+    const r = rng();
+    c.setHSL(r < 0.3 ? 0.08 : 0.6, r < 0.3 ? 0.5 : 0.35, 0.75 + rng() * 0.25).toArray(col, i * 3);
+    size[i] = 0.7 + Math.pow(rng(), 7) * 3.2;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { pr: { value: renderer.getPixelRatio() } },
+    vertexShader: `attribute vec3 aColor; attribute float aSize; uniform float pr; varying vec3 vC;
+      void main() { vC = aColor; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = aSize * pr; }`,
+    fragmentShader: `varying vec3 vC;
+      void main() { float a = smoothstep(0.5, 0.0, length(gl_PointCoord - 0.5)); gl_FragColor = vec4(vC * a, a); }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const stars = new THREE.Points(g, m);
+  stars.renderOrder = -1;
+  scene.add(stars);
+  return m;
+})();
+
+// Lights only affect the data columns; the planet uses its own shader.
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+scene.add(new THREE.AmbientLight(0xffffff, 0.75), sunLight);
+
+/* ---------- camera rig ---------- */
+// The camera is described by the point it looks at plus distance, tilt and heading.
+const view = { lat: 42, lon: -112, dist: 16, tilt: 0, heading: 0 };
+const T = new THREE.Vector3();
+function applyCamera() {
+  view.lat = clamp(view.lat, -85, 85);
+  view.lon = wrapLon(view.lon);
+  const f = frameAt(view.lat, view.lon);
+  const t = view.tilt * D2R, h = view.heading * D2R;
+  const fwd = f.north.clone().multiplyScalar(Math.cos(h)).addScaledVector(f.east, Math.sin(h));
+  const dir = f.n.clone().multiplyScalar(Math.cos(t)).addScaledVector(fwd, -Math.sin(t));
+  const ct = Math.cos(t), minR = 1.1;                       // stay outside the atmosphere shell
+  view.dist = Math.max(view.dist, -ct + Math.sqrt(ct * ct - 1 + minR * minR));
+  T.copy(f.n);
+  camera.position.copy(T).addScaledVector(dir, view.dist);
+  camera.up.copy(fwd).multiplyScalar(Math.cos(t)).addScaledVector(f.n, Math.sin(t));
+  camera.lookAt(T);
+  camera.updateMatrixWorld();
+}
+
+let flight = null;
+function slerpUnit(a, b, theta, t) {
+  if (theta < 1e-5) return a.clone();
+  const s = Math.sin(theta);
+  if (s < 1e-4) return a.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * t);
+  return a.clone().multiplyScalar(Math.sin((1 - t) * theta) / s).addScaledVector(b, Math.sin(t * theta) / s);
+}
+function flyTo(v, instant) {
+  const to = { lat: v.lat, lon: v.lon, dist: v.dist, tilt: v.tilt ?? 0, heading: v.heading ?? 0 };
+  if (instant || reduceMotion) { Object.assign(view, to); flight = null; return 0; }
+  const from = { ...view };
+  const a = llToVec(from.lat, from.lon), b = llToVec(to.lat, to.lon);
+  const theta = a.angleTo(b);
+  const dur = clamp(1.5 + theta * 0.95 + Math.abs(Math.log(to.dist / from.dist)) * 0.28, 1.6, 3.8);
+  flight = { from, to, a, b, theta, dur, t: 0 };
+  return dur;
+}
+function stepFlight(dt) {
+  const F = flight;
+  F.t = Math.min(1, F.t + dt / F.dur);
+  const t = F.t, e = easeInOut(t), arc = Math.sin(Math.PI * t);
+  const ll = vecToLL(slerpUnit(F.a, F.b, F.theta, e));
+  view.lat = ll.lat; view.lon = ll.lon;
+  // zoom in log space and climb on long hops, like a flight path
+  const l0 = Math.log(F.from.dist), l1 = Math.log(F.to.dist);
+  const lift = Math.max(0, Math.log(Math.max(F.theta * 2.1, 1e-3)) - (l0 + l1) / 2);
+  view.dist = Math.exp(lerp(l0, l1, e) + lift * arc);
+  view.tilt = lerp(F.from.tilt, F.to.tilt, e) * (1 - 0.85 * arc * Math.min(1, F.theta * 1.4));
+  view.heading = F.from.heading + ((((F.to.heading - F.from.heading) % 360) + 540) % 360 - 180) * e;
+  if (t >= 1) { Object.assign(view, F.to); flight = null; }
+}
+
+/* ---------- labels ---------- */
+const labelsEl = $('labels');
+const labels = [];
+function makeLabel(pos, html, cls = '') {
+  const el = document.createElement('div');
+  el.className = 'label ' + cls;
+  el.innerHTML = `<span class="label-stem"></span><span class="label-text">${html}</span>`;
+  labelsEl.appendChild(el);
+  const L = { el, pos, alpha: 0, vis: 0, on: false };
+  labels.push(L);
+  return L;
+}
+const tmp = new THREE.Vector3(), pv = new THREE.Vector3();
+function occluded(P) {
+  const C = camera.position;
+  tmp.subVectors(P, C);
+  const len = tmp.length();
+  tmp.divideScalar(len);
+  const b = C.dot(tmp), disc = b * b - (C.lengthSq() - 1);
+  if (disc <= 0) return false;
+  const hit = -b - Math.sqrt(disc);
+  return hit > 0 && hit < len - 0.004;
+}
+function updateLabels(dt) {
+  const W = innerWidth, H = innerHeight;
+  for (const L of labels) {
+    if (L.alpha < 0.01) {
+      if (L.on) { L.el.style.opacity = '0'; L.on = false; }
+      continue;
+    }
+    L.on = true;
+    pv.copy(L.pos).project(camera);
+    L.vis = damp(L.vis, pv.z > 1 || occluded(L.pos) ? 0 : 1, 12, dt);
+    const x = (pv.x * 0.5 + 0.5) * W, y = (-pv.y * 0.5 + 0.5) * H;
+    // slide the label box sideways so it never runs off screen
+    L.w ||= L.el.lastChild.offsetWidth;
+    const shift = Math.round(Math.max(16 - x, Math.min(0, W - 16 - L.w - x)));
+    if (shift !== L.shift) { L.shift = shift; L.el.lastChild.style.transform = shift ? `translateX(${shift}px)` : ''; }
+    L.el.style.opacity = (L.alpha * L.vis).toFixed(3);
+    L.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+  }
+}
+
+/* ---------- scene features (markers, study area, data columns, orbit) ---------- */
+const Z = new THREE.Vector3(0, 0, 1);
+const allFeatures = new Set();
+function fade(f, dt, speed = 3) {
+  f.alpha = damp(f.alpha, f.target, speed, dt);
+  if (Math.abs(f.alpha - f.target) < 0.002) f.alpha = f.target;
+}
+
+const ringGeo = new THREE.RingGeometry(0.7, 1, 64);
+const dotGeo = new THREE.CircleGeometry(0.3, 32);
+function makeMarker({ lat, lon, label, note, sub }) {
+  const pos = llToVec(lat, lon, 1.0015);
+  const group = new THREE.Group();
+  group.position.copy(pos);
+  group.quaternion.setFromUnitVectors(Z, pos.clone().normalize());
+  const ringMat = new THREE.MeshBasicMaterial({ color: COLOR_SUN, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+  const dotMat = ringMat.clone();
+  const ring = new THREE.Mesh(ringGeo, ringMat), dot = new THREE.Mesh(dotGeo, dotMat);
+  ring.renderOrder = dot.renderOrder = 5;
+  group.add(ring, dot);
+  group.visible = false;
+  scene.add(group);
+  const lab = makeLabel(pos, `<b>${label}</b><small>${sub ?? `${fmtLat(lat)} · ${fmtLon(lon)}`}</small>${note ? `<em>${note}</em>` : ''}`);
+  const phase = Math.random();
+  return {
+    alpha: 0, target: 0,
+    update(dt, time) {
+      fade(this, dt);
+      lab.alpha = this.alpha;
+      group.visible = this.alpha > 0.01;
+      if (!group.visible) return;
+      group.scale.setScalar(camera.position.distanceTo(pos) * 0.016);   // constant size on screen
+      const p = reduceMotion ? 0.4 : (time * 0.55 + phase) % 1;
+      ring.scale.setScalar(1 + p * 1.8);
+      ringMat.opacity = this.alpha * (1 - p) * 0.9;
+      dotMat.opacity = this.alpha;
+    },
+  };
+}
+
+function makeArea(lat, lon, radiusDeg, label, sub) {
+  const f = frameAt(lat, lon), rho = radiusDeg * D2R, pts = [];
+  for (let i = 0; i <= 200; i++) {
+    const a = (i / 200) * Math.PI * 2;
+    pts.push(f.n.clone().multiplyScalar(Math.cos(rho))
+      .addScaledVector(f.north, Math.sin(rho) * Math.cos(a))
+      .addScaledVector(f.east, Math.sin(rho) * Math.sin(a))
+      .multiplyScalar(1.004));
+  }
+  const mat = new THREE.LineDashedMaterial({ color: COLOR_SUN, dashSize: 0.014, gapSize: 0.009, transparent: true, opacity: 0, depthWrite: false });
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+  line.computeLineDistances();
+  line.renderOrder = 4;
+  line.visible = false;
+  scene.add(line);
+  const lab = label === false ? { alpha: 0 } : makeLabel(pts[0].clone(), `<b>${label ?? 'Study area'}</b><small>${sub ?? `radius ≈ ${Math.round(radiusDeg * 111.2).toLocaleString('en-US')} km`}</small>`);
+  return {
+    alpha: 0, target: 0,
+    update(dt) {
+      fade(this, dt);
+      line.visible = this.alpha > 0.01;
+      mat.opacity = this.alpha * 0.9;
+      lab.alpha = this.alpha;
+    },
+  };
+}
+
+// Real model output: one column per 0.5° land cell, [lat, lon, similarity 0..1].
+// Height and colour both show similarity on a fixed scale (0 to cfg.max), like the app's heatmap.
+function makeData(cfg) {
+  const HMAX = cfg.height ?? 0.08, VMAX = cfg.max ?? 0.6, deg = cfg.cell ?? 0.5;
+  const rows = cfg.cells || [];
+  const centre = rows.length ? llToVec(rows[0][0], rows[0][1]) : new THREE.Vector3(1, 0, 0);
+  const rng = mulberry32(7);
+  const cells = rows.map(([lat, lon, score]) => {
+    const v = llToVec(lat, lon);
+    return { v, lat, lon, score, val: clamp(score / VMAX, 0.03, 1), delay: centre.angleTo(v) * R2D / 25 * 0.9 + rng() * 0.15, q: new THREE.Quaternion().setFromUnitVectors(Z, v) };
+  });
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, cells.length));
+  mesh.count = cells.length;
+  const col = new THREE.Color();
+  cells.forEach((c, i) => mesh.setColorAt(i, rampColor(c.val, col)));
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  mesh.renderOrder = 3;
+  scene.add(mesh);
+  const peak = cells[0];
+  const lab = peak && cfg.peak
+    ? makeLabel(peak.v.clone().multiplyScalar(1 + peak.val * HMAX), `<b>${cfg.peak.label} · ${Math.round(peak.score * 100)}%</b><small>${fmtLat(peak.lat)} · ${fmtLon(peak.lon)}</small>${cfg.peak.note ? `<em>${cfg.peak.note}</em>` : ''}`)
+    : null;
+  const w = deg * D2R * 0.86, m4 = new THREE.Matrix4(), sc = new THREE.Vector3();
+  return {
+    alpha: 0, target: 0, clock: 0,
+    activate() { if (this.alpha < 0.5) this.clock = 0; },
+    update(dt) {
+      fade(this, dt, 4);
+      mesh.visible = this.alpha > 0.01 && cells.length > 0;
+      if (lab) lab.alpha = 0;
+      if (!mesh.visible) return;
+      if (this.target === 1) this.clock += dt;
+      if (this.target === 1 && this.clock > 3 && this.settled) { if (lab) lab.alpha = this.alpha; return; }
+      cells.forEach((c, i) => {
+        const g = this.target === 1 ? easeOut(clamp((this.clock - c.delay) / 0.9, 0, 1)) : this.alpha;
+        mesh.setMatrixAt(i, m4.compose(c.v, c.q, sc.set(w, w, Math.max(1e-4, c.val * HMAX * g))));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      this.settled = this.target === 1 && this.clock > 3;
+      if (lab) lab.alpha = this.target === 1 ? clamp((this.clock - peak.delay - 0.6) * 2, 0, 1) : 0;
+    },
+  };
+}
+
+function glowTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d'), grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.18, 'rgba(210,235,255,0.9)');
+  grd.addColorStop(0.45, 'rgba(140,200,255,0.25)');
+  grd.addColorStop(1, 'rgba(140,200,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let orbitFeature = null;
+function makeOrbit(v) {
+  const RO = 1.32;
+  const f = frameAt(v.lat, v.lon);
+  const normal = f.north.clone().multiplyScalar(Math.cos(0.32)).addScaledVector(f.n, Math.sin(0.32)).applyAxisAngle(f.n, 22 * D2R).normalize();
+  const group = new THREE.Group();
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  const pts = [];
+  for (let i = 0; i <= 256; i++) { const a = (i / 256) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * RO, 0, Math.sin(a) * RO)); }
+  const lineMat = new THREE.LineBasicMaterial({ color: COLOR_AIR, transparent: true, opacity: 0, depthWrite: false });
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+  const satMat = new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const sat = new THREE.Sprite(satMat);
+  sat.scale.setScalar(0.1);
+  line.renderOrder = sat.renderOrder = 4;
+  group.add(line, sat);
+  group.visible = false;
+  scene.add(group);
+  const satWorld = new THREE.Vector3();
+  const lab = makeLabel(satWorld, '<b>Example satellite</b><small>Orbit not to scale</small>', 'label--air');
+  let a = 2.2;
+  return {
+    alpha: 0, target: 0,
+    update(dt) {
+      fade(this, dt);
+      group.visible = this.alpha > 0.01;
+      lab.alpha = this.alpha;
+      if (!group.visible) return;
+      if (!reduceMotion) a += dt * 0.3;
+      sat.position.set(Math.cos(a) * RO, 0, Math.sin(a) * RO);
+      group.updateMatrixWorld();
+      satWorld.copy(sat.position).applyMatrix4(group.matrixWorld);
+      lineMat.opacity = this.alpha * 0.55;
+      satMat.opacity = this.alpha;
+    },
+  };
+}
+
+function buildFeatures() {
+  for (const s of SLIDES) {
+    s._f = [];
+    (s.markers || []).forEach(m => s._f.push(makeMarker(m)));
+    if (s.places) s.places.rows.forEach(p => s._f.push(makeMarker({ lat: p.lat, lon: p.lon, label: p.name, sub: `${fmtPct(p.value)} ${p.sub ?? ''}`, note: p.rank })));
+    if (s.ring) s._f.push(makeArea(s.ring.lat ?? s.view.lat, s.ring.lon ?? s.view.lon, s.ring.radius ?? 10, s.ring.label, s.ring.sub));
+    if (s.data) s._f.push(makeData(s.data));
+    if (s.orbit) { orbitFeature ??= makeOrbit(s.view); s._f.push(orbitFeature); }
+    s._f.forEach(f => allFeatures.add(f));
+  }
+}
+
+/* ---------- slide panel ---------- */
+const ICON_MEDIA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M10 9.5v5l4.5-2.5z"/></svg>';
+const ICON_PERSON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="9" r="3.6"/><path d="M5 20c1.2-3.6 4-5.2 7-5.2s5.8 1.6 7 5.2"/></svg>';
+// QR code as crisp SVG squares (vendor/qrcode.js, MIT). Without it, only the link text is shown.
+function qrSVG(url) {
+  if (!window.qrcode) return '';
+  const q = window.qrcode(0, 'M');
+  q.addData(url);
+  q.make();
+  const n = q.getModuleCount();
+  let d = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+  return `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="QR code for ${url}"><path d="${d}" fill="#04060b"/></svg>`;
+}
+const sampleTag = on => (on ? '<span class="tag">Sample</span>' : '');
+
+function panelHTML(s, nested = false) {
+  const b = [];
+  if (s.eyebrow) b.push(`<p class="eyebrow">${s.eyebrow}</p>`);
+  if (s.stage != null) b.push(`<ol class="stage" aria-label="Workflow step ${s.stage + 1} of ${STAGES.length}">${STAGES.map((x, k) => `<li class="${k === s.stage ? 'on' : k < s.stage ? 'past' : ''}">${x}</li>`).join('')}</ol>`);
+  if (s.head) b.push(`<p class="col-head">${s.head}</p>`);
+  if (s.title) b.push(s.layout === 'hero' ? `<h1 class="title">${s.title}</h1>` : `<h2 class="title">${s.title}</h2>`);
+  if (s.lead) b.push(`<p class="lead">${s.lead}</p>`);
+  if (s.flow) b.push(`<ol class="flow">${s.flow.map(x => `<li>${x}</li>`).join('')}</ol>`);
+  if (s.vs) b.push(`<div class="vs"><div class="good"><b>${s.vs.a.value}</b><span>${s.vs.a.label}</span></div><i>${s.vs.word || 'vs'}</i><div><b>${s.vs.b.value}</b><span>${s.vs.b.label}</span></div></div>`);
+  if (s.sub) b.push(`<p class="sub">${s.sub}</p>`);
+  if (s.quote) b.push(`<blockquote class="quote"><p>${s.quote.text}</p>${s.quote.cite ? `<cite>${s.quote.cite}</cite>` : ''}</blockquote>`);
+  if (s.stat) b.push(`<div class="stat"><p class="stat-value">${s.stat.value}<span class="stat-unit">${s.stat.unit || ''}</span>${sampleTag(s.stat.sample)}</p><p class="stat-caption">${s.stat.caption || ''}</p></div>`);
+  if (s.stats) b.push(`<ul class="stats" style="--n:${s.stats.length}">${s.stats.map(x => `<li><b>${x.value}${x.unit ? `<small>${x.unit}</small>` : ''}</b><span>${x.label}</span></li>`).join('')}</ul>`);
+  if (s.body) b.push(`<p class="body">${s.body}</p>`);
+  if (s.evidence) b.push(`<ul class="evidence">${s.evidence.map(e => `<li class="${e.value ? '' : 'noval'}">${e.value ? `<span class="ev-value">${e.value}${e.unit ? `<small>${e.unit}</small>` : ''}</span>` : ''}<span class="ev-text">${e.text}</span>${e.cite ? `<span class="ev-cite">${e.cite}</span>` : ''}</li>`).join('')}</ul>`);
+  if (s.bars) {
+    const B = s.bars;
+    b.push(`<div class="bars"><div class="bars-head"><span>${B.head}</span><b>${B.score}</b></div><table><tbody>${
+      B.rows.map(r => `<tr><td>${r.label}</td><td class="w">${r.weight}%</td><td class="v"><span class="num"><span class="bar" style="--v:${clamp(r.value, 0, 1)}"></span>${Math.round(r.value * 100)}</span></td><td class="q${r.q === 'estimate' ? ' est' : ''}">${r.q}</td></tr>`).join('')
+    }</tbody></table></div>`);
+  }
+  if (s.ledger) {
+    const L = s.ledger;
+    b.push(`<table class="ledger">${L.caption ? `<caption>${L.caption}</caption>` : ''}<tbody>${
+      L.rows.map(r => `<tr class="${r.total ? 'total' : ''}"><td>${r.item}${r.note ? `<small>${r.note}</small>` : ''}</td><td class="amt">${r.amount}</td></tr>`).join('')
+    }</tbody></table>`);
+  }
+  if (s.cards) b.push(`<ul class="cards">${s.cards.map(c => `<li><div class="card-who"><b>${c.who}</b><span>${c.tag || ''}</span></div>${c.goal ? `<p class="card-goal">${c.goal}</p>` : ''}<ol>${c.steps.map(x => `<li><span>${x}</span></li>`).join('')}</ol></li>`).join('')}</ul>`);
+  if (s.columns) b.push(`<div class="cols" style="--n:${s.columns.length}">${s.columns.map(c => `<div class="col">${panelHTML(c, true)}</div>`).join('')}</div>`);
+  if (s.steps) b.push(`<ol class="steps">${s.steps.map(x => `<li><b>${x.name}</b>${x.desc ? `<span>${x.desc}</span>` : ''}</li>`).join('')}</ol>`);
+  if (s.bullets) b.push(`<ul class="bullets">${s.bullets.map(x => `<li><span>${x}</span></li>`).join('')}</ul>`);
+  if (s.chips) b.push(`<ul class="sources">${s.chips.map(c => `<li><b>${c.name}</b><span>${c.desc || ''}</span></li>`).join('')}</ul>`);
+  if (s.places) {
+    const P = s.places;
+    b.push(`<table class="table"><thead><tr><th scope="col">Site</th><th scope="col">${P.label}${sampleTag(P.sample)}</th><th scope="col" class="rank">Rank</th></tr></thead><tbody>${
+      P.rows.map(r => `<tr><td>${r.name}${r.sub ? `<small>${r.sub}</small>` : ''}</td><td><span class="num"><span class="bar" style="--v:${clamp(r.value / (P.max ?? 0.6), 0, 1)}"></span>${fmtPct(r.value)}</span></td><td class="rank">${r.rank ?? ''}</td></tr>`).join('')
+    }</tbody></table>`);
+  }
+  if (s.legend) {
+    const L = s.legend;
+    b.push(`<div class="legend"><div class="legend-head"><span>${L.label}</span>${sampleTag(L.sample)}</div><div class="ramp"></div><div class="legend-ends"><span>${L.min}</span><span>${L.max}</span></div></div>`);
+  }
+  if (s.media) {
+    const m = s.media, isVid = /\.(mp4|webm|mov)$/i.test(m.src || '');
+    const inner = m.src
+      ? (isVid ? `<video src="${m.src}" autoplay muted loop playsinline></video>` : `<img src="${m.src}" alt="${m.alt || ''}">`)
+      : `<div class="media-slot">${ICON_MEDIA}<span>Add a screenshot or screen recording</span><code>media: { src: 'demo.mp4' }</code></div>`;
+    b.push(`<figure class="media">${inner}${m.caption ? `<figcaption>${m.caption}</figcaption>` : ''}</figure>`);
+  }
+  if (s.team) b.push(`<ul class="team">${s.team.map(p => `<li><span class="avatar">${p.photo ? `<img src="${p.photo}" alt="">` : ICON_PERSON}</span><span class="who"><b>${p.name}</b><span>${p.role || ''}</span></span></li>`).join('')}</ul>`);
+  if (s.meta) b.push(`<ul class="meta">${s.meta.map(x => `<li>${x}</li>`).join('')}</ul>`);
+  if (s.links) b.push(`<dl class="links">${s.links.map(l => `<dt>${l.label}</dt><dd>${l.value}</dd>`).join('')}</dl>`);
+  if (s.qr) b.push(`<div class="qr-wrap"><div class="qr">${qrSVG(s.qr.url)}</div><div class="qr-text"><b>${s.qr.label || 'Scan me'}</b><span>${s.qr.url.replace(/^https?:[/][/]/, '')}</span></div></div>`);
+  if (s.note) b.push(`<p class="note">${s.note}</p>`);
+  return nested ? b.join('') : b.map((h, i) => h.replace(/^<([a-z0-9]+)/i, `<$1 style="--i:${i}"`)).join('');
+}
+
+/* ---------- navigation ---------- */
+const panel = $('panel'), panelBody = $('panelBody'), track = $('track'), counter = $('counter');
+const prevBtn = $('prev'), nextBtn = $('next'), hint = $('hint');
+$('brandName').textContent = DECK.name;
+$('brandEvent').textContent = DECK.event;
+
+SLIDES.forEach((s, i) => {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.dataset.title = plain(s.title);
+  btn.setAttribute('aria-label', `Slide ${i + 1}: ${plain(s.title)}`);
+  if (i < 2) btn.classList.add('tip-start');
+  if (i >= SLIDES.length - 2) btn.classList.add('tip-end');
+  btn.addEventListener('click', () => goTo(i));
+  track.appendChild(btn);
+});
+
+let current = -1, swapTimer = 0, swap = null;
+let sunAngle = SUN_ANGLE.day, sunTarget = sunAngle, cloudTarget = 1;
+const off = { x: 0, y: 0 };
+let offTarget = { x: 0, y: 0 };
+let userHold = false;
+const vel = { n: 0, e: 0 }, frameMove = { n: 0, e: 0 };
+let pendingZoom = 0;
+
+function layoutOffset(s) {
+  if (mqPhone.matches) return { x: 0, y: s.layout === 'hero' ? 0.12 : 0.2 };
+  return { x: s.layout === 'hero' ? -0.2 : s.xwide ? -0.3 : -0.17, y: 0 };
+}
+function hideHint() { hint.classList.add('is-off'); }
+
+function goTo(i, opts = {}) {
+  i = clamp(i, 0, SLIDES.length - 1);
+  if (i === current) return;
+  current = i;
+  const s = SLIDES[i];
+  userHold = false; vel.n = vel.e = 0; pendingZoom = 0;
+  const body = s.world || 'earth';
+  let dur;
+  if (body !== currentBody && !opts.instant && !reduceMotion && (body === 'earth' || bodyTex[body])) {
+    // Another world: fade this one out while pulling back, swap the maps, then fly in.
+    flight = null;
+    swap = { t: 0, body, view: s.view, done: false };
+    dur = 2.2;
+  } else {
+    if (body !== currentBody) { setBody(body); shared.fade.value = 1; swap = null; }
+    dur = flyTo(s.view, opts.instant);
+  }
+  sunTarget = SUN_ANGLE[s.sun || 'day'];
+  cloudTarget = s.clouds ?? 1;
+  offTarget = layoutOffset(s);
+  for (const f of allFeatures) f.target = 0;
+
+  panel.classList.add('is-leaving');
+  clearTimeout(swapTimer);
+  swapTimer = setTimeout(() => {
+    panel.classList.toggle('hero', s.layout === 'hero');
+    panel.classList.toggle('wide', !!s.wide && s.layout !== 'hero');
+    panel.classList.toggle('xwide', !!s.xwide && s.layout !== 'hero');
+    panelBody.innerHTML = panelHTML(s);
+    panelBody.scrollTop = 0;
+    panel.classList.remove('is-leaving');
+    for (const f of s._f || []) { f.target = 1; f.activate?.(); }
+  }, dur ? clamp(dur * 0.5, 0.3, 1.5) * 1000 : 0);
+
+  [...track.children].forEach((b, k) => {
+    b.classList.toggle('done', k < i);
+    b.classList.toggle('current', k === i);
+    if (k === i) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+  });
+  counter.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b> / ${String(SLIDES.length).padStart(2, '0')}`;
+  prevBtn.disabled = i === 0;
+  nextBtn.disabled = i === SLIDES.length - 1;
+  try { history.replaceState(null, '', '#' + s.id); } catch { /* not allowed in some viewers */ }
+  if (i > 0) hideHint();
+}
+
+prevBtn.addEventListener('click', () => goTo(current - 1));
+nextBtn.addEventListener('click', () => goTo(current + 1));
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+$('fs').addEventListener('click', toggleFullscreen);
+
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const onButton = e.target instanceof HTMLButtonElement;
+  switch (e.key) {
+    case 'ArrowRight': case 'ArrowDown': case 'PageDown': goTo(current + 1); break;
+    case 'ArrowLeft': case 'ArrowUp': case 'PageUp': goTo(current - 1); break;
+    case ' ': case 'Enter': if (onButton) return; goTo(current + (e.shiftKey ? -1 : 1)); break;
+    case 'Home': goTo(0); break;
+    case 'End': goTo(SLIDES.length - 1); break;
+    case 'f': case 'F': toggleFullscreen(); break;
+    case 'h': case 'H': document.body.classList.toggle('chrome-off'); break;
+    default:
+      if (/^[1-9]$/.test(e.key)) { goTo(Number(e.key) - 1); break; }
+      return;
+  }
+  e.preventDefault();
+});
+
+/* ---------- drag, scroll and pinch ---------- */
+const pointers = new Map();
+let lastPinch = 0;
+function moveBy(dN, dE) {
+  view.lat = clamp(view.lat + dN * R2D, -85, 85);
+  view.lon += (dE * R2D) / Math.max(0.25, Math.cos(view.lat * D2R));
+}
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  canvas.classList.add('dragging');
+  flight = null; userHold = true; vel.n = vel.e = 0; lastPinch = 0;
+  hideHint();
+});
+canvas.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 1) {
+    // grab-the-surface feel: radians per pixel at the current distance
+    const k = Math.min(0.005, (2 * view.dist * Math.tan((camera.fov * D2R) / 2)) / innerHeight);
+    const h = view.heading * D2R;
+    const dN = (Math.sin(h) * dx + Math.cos(h) * dy) * k;
+    const dE = (-Math.cos(h) * dx + Math.sin(h) * dy) * k;
+    moveBy(dN, dE);
+    frameMove.n += dN; frameMove.e += dE;
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (lastPinch) pendingZoom += Math.log(lastPinch / d);
+    lastPinch = d;
+  }
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  lastPinch = 0;
+  if (!pointers.size) canvas.classList.remove('dragging');
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  flight = null; userHold = true; hideHint();
+  pendingZoom += clamp(e.deltaY * (e.deltaMode === 1 ? 16 : 1), -160, 160) * 0.0016;
+}, { passive: false });
+
+/* ---------- HUD ---------- */
+const hudLat = $('hudLat'), hudLon = $('hudLon'), hudAlt = $('hudAlt'), hudBody = $('hudBody');
+let hudKey = '';
+function updateHud() {
+  const a = fmtLat(view.lat), b = fmtLon(view.lon);
+  const c = `${Math.round((camera.position.length() - 1) * BODY[currentBody].km).toLocaleString('en-US')} km`;
+  const key = a + b + c + currentBody;
+  if (key === hudKey) return;
+  hudKey = key;
+  hudLat.textContent = a; hudLon.textContent = b; hudAlt.textContent = c; hudBody.textContent = BODY[currentBody].name;
+}
+
+/* ---------- resize ---------- */
+function resize() {
+  const w = innerWidth, h = innerHeight, aspect = w / h;
+  renderer.setSize(w, h);
+  camera.aspect = aspect;
+  // in portrait, widen the lens so the planet still fits side to side
+  camera.fov = aspect < 1 ? Math.min(72, 2 * Math.atan((Math.tan(20 * D2R) * 0.95) / aspect) * R2D) : 40;
+  camera.updateProjectionMatrix();
+  starMat.uniforms.pr.value = renderer.getPixelRatio();
+  if (current >= 0) offTarget = layoutOffset(SLIDES[current]);
+}
+addEventListener('resize', resize);
+resize();
+
+/* ---------- frame loop ---------- */
+const camRight = new THREE.Vector3(), camUp = new THREE.Vector3();
+let time = 0, last = performance.now();
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; time += dt;
+  const s = SLIDES[current];
+
+  if (swap) {
+    swap.t += dt;
+    if (!swap.done) {
+      const k = clamp(swap.t / 0.7, 0, 1);
+      shared.fade.value = 1 - k;
+      view.dist *= Math.exp(dt * 0.9);
+      if (k >= 1) {
+        setBody(swap.body);
+        const v = swap.view;
+        Object.assign(view, { lat: clamp(v.lat - 10, -80, 80), lon: v.lon + 30, dist: Math.max(3.6, v.dist * 2.4), tilt: 0, heading: v.heading ?? 0 });
+        flyTo(v);
+        swap.done = true; swap.t = 0;
+      }
+    } else {
+      shared.fade.value = clamp(swap.t / 0.8, 0, 1);
+      if (swap.t >= 0.8) swap = null;
+    }
+  }
+  if (swap && !swap.done) { /* the swap moves the camera itself */ }
+  else if (flight) stepFlight(dt);
+  else {
+    if (pointers.size) {
+      vel.n = damp(vel.n, frameMove.n / Math.max(dt, 1e-3), 18, dt);
+      vel.e = damp(vel.e, frameMove.e / Math.max(dt, 1e-3), 18, dt);
+    } else if (vel.n || vel.e) {
+      moveBy(vel.n * dt, vel.e * dt);
+      const k = Math.exp(-3.2 * dt);
+      vel.n *= k; vel.e *= k;
+      if (Math.abs(vel.n) + Math.abs(vel.e) < 1e-4) vel.n = vel.e = 0;
+    }
+    if (s?.spin && !userHold && !reduceMotion) view.lon -= dt * 2.4;   // Earth turns west to east
+  }
+  frameMove.n = frameMove.e = 0;
+  if (Math.abs(pendingZoom) > 1e-4) {
+    const stepZ = pendingZoom * (1 - Math.exp(-10 * dt));
+    view.dist = clamp(view.dist * Math.exp(stepZ), 0.2, 12);
+    pendingZoom -= stepZ;
+  }
+  applyCamera();
+
+  // The sun is placed relative to the view so the subject is always lit the way the slide asks.
+  sunAngle = damp(sunAngle, sunTarget, 2, dt);
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  sunDir.copy(T).multiplyScalar(Math.cos(sunAngle)).addScaledVector(camRight, -Math.sin(sunAngle)).addScaledVector(camUp, 0.32).normalize();
+  sunLight.position.copy(sunDir).multiplyScalar(10);
+  shared.cloudShift.value = reduceMotion ? 0 : time * 0.0018;
+  shared.cloudAmount.value = damp(shared.cloudAmount.value, cloudTarget, 2, dt);
+
+  for (const f of allFeatures) f.update(dt, time);
+
+  off.x = damp(off.x, offTarget.x, 3, dt);
+  off.y = damp(off.y, offTarget.y, 3, dt);
+  camera.setViewOffset(innerWidth, innerHeight, off.x * innerWidth, off.y * innerHeight, innerWidth, innerHeight);
+
+  updateLabels(dt);
+  updateHud();
+  renderer.render(scene, camera);
+});
+
+/* ---------- loading ---------- */
+function canvasTexture(w, h, draw, srgb = true) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function useFallbacks() {
+  if (failed.includes(F_DAY)) {
+    earthMat.uniforms.dayMap.value = canvasTexture(2048, 1024, (g, w, h) => {
+      g.fillStyle = '#0c2238'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(140,200,255,0.35)'; g.lineWidth = 2;
+      for (let lon = 0; lon <= 360; lon += 15) { g.beginPath(); g.moveTo((lon / 360) * w, 0); g.lineTo((lon / 360) * w, h); g.stroke(); }
+      for (let lat = 0; lat <= 180; lat += 15) { g.beginPath(); g.moveTo(0, (lat / 180) * h); g.lineTo(w, (lat / 180) * h); g.stroke(); }
+    });
+  }
+  if (failed.includes(F_NIGHT)) earthMat.uniforms.nightMap.value = canvasTexture(4, 2, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); });
+  if (failed.includes(F_BRC)) {
+    const t = canvasTexture(4, 2, (g, w, h) => { g.fillStyle = 'rgb(0,255,0)'; g.fillRect(0, 0, w, h); }, false);
+    earthMat.uniforms.brcMap.value = cloudMat.uniforms.brcMap.value = t;
+  }
+  const toast = $('toast');
+  toast.textContent = 'Earth imagery could not load, so this is a simplified globe. Check your internet connection and reload.';
+  toast.hidden = false;
+}
+
+manager.onProgress = (url, loaded, total) => {
+  $('loaderCount').textContent = `${loaded} of ${total}`;
+  $('loaderBar').style.transform = `scaleX(${Math.max(0.04, loaded / total)})`;
+};
+manager.onLoad = () => {
+  if ([F_DAY, F_NIGHT, F_BRC].some(f => failed.includes(f))) useFallbacks();
+  buildFeatures();
+  $('loader').classList.add('done');
+  setTimeout(() => { $('loader').hidden = true; }, 1000);
+  const fromHash = SLIDES.findIndex(s => '#' + s.id === location.hash);
+  goTo(fromHash >= 0 ? fromHash : 0);
+};
+</script>
+</body>
+</html>
