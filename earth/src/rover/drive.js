@@ -1,14 +1,14 @@
 // Drive-mode physics: a dynamic, gravity-aware rover on a terrain patch. Pure logic, no 3D, deterministic for the same inputs.
 // A screening model, not validated against a real rover. All drive-force, power and battery figures come from the effective rover config (rovercfg.js, built from
 // assets/models/rovers.json) and are flagged verified:false there when they are assumptions. Terrain contact (wheel points, plane fit), friction and rolling resistance come from sim.js so both stay in step.
-import { sampleGrid, upsample } from './terrain.js';
+import { contactSampler, upsample } from './terrain.js';
 import { wheelPoints, contactFit, crrFromSoil, START } from './sim.js';
 import { SoilDrag } from './soilmech.js';
 
 export const STEP = 1 / 120;                 // fixed physics step, simulated seconds
 export const DEMO_SCALES = [1, 5, 10, 25];   // demo speed scale: multiplies simulated time per real second, never the forces
 export const DEG = Math.PI / 180;
-const MAX_STEPS = 600, TAU_LAT = 0.12, OM0 = 0.12, V_CAP = 3;
+const MAX_STEPS = 240, TAU_LAT = 0.12, OM0 = 0.12, V_CAP = 3;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const sgn = x => (x > 0 ? 1 : x < 0 ? -1 : 0);
 
@@ -18,14 +18,14 @@ export class DriveSim {
   constructor(patch, par, { g, mu, soil, mass, S }) {
     this.p = patch; this.par = par; this.W = wheelPoints(par); this.U = upsample(patch);
     this.g = g; this.mu = mu; this.crr = crrFromSoil(soil); this.m = mass ?? par.mass_kg; this.drag = S ? new SoilDrag(par, S) : null;
-    this.sample = (x, z) => sampleGrid(this.U.h, this.U.M, this.U.dx, x, z);
+    this.sample = contactSampler(patch, par.wheel_radius_m, par.wheel_width_m || 0.3);   // the shared height function over the wheel footprint (terrain.js), as the view and the HUD
     this.reset();
   }
   reset() {
     const p = this.p;
     Object.assign(this, { x: START[0] * p.size, z: START[1] * p.size, psi: 0, v: 0, u: 0, om: 0, acc: 0, simT: 0, E: 0, Ed: 0, dist: 0, wheelAng: 0, edge: false,
       spin: 0, sliding: false, P: 0, Fx: 0, N: 0, muN: 0, binE: 0, binS: 0, bins: [], aLong: 0, dead: false, battery: 1, lastRes: 0 });
-    this.fit = contactFit(this.sample, this.x, this.z, this.psi, this.W);
+    this.fit = contactFit(this.sample, this.x, this.z, this.psi, this.W, this._fit || (this._fit = {}));
   }
   /** Advance by real time realDt at demo scale `scale`, in fixed simulated steps. inp = { throttle -1..1, steer -1..1 (right positive), brake 0..1 }. */
   advance(realDt, scale, inp) {
@@ -36,7 +36,7 @@ export class DriveSim {
   }
   step(inp, dt = STEP) {
     const { par, m, g, mu, crr } = this, W = this.W;
-    const f = contactFit(this.sample, this.x, this.z, this.psi, W); this.fit = f;
+    const f = contactFit(this.sample, this.x, this.z, this.psi, W, this._fit || (this._fit = {})); this.fit = f;
     const sa = f.sa, sb = f.sb, alpha = Math.atan(Math.hypot(sa, sb)), cosA = Math.cos(alpha);
     const N = m * g * cosA, muN = mu * N, Fres = crr * N + (this.drag ? this.drag.at(N).Rc : 0);                    // wheel normal load, traction limit, rolling resistance (newtons)
     const Fg = -m * g * (sa / Math.hypot(1, sa)), Fgr = -m * g * (sb / Math.hypot(1, sb));   // gravity components along the heading and to the right
