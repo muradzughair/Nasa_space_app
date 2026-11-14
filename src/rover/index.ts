@@ -14,6 +14,7 @@ import { drape, DRAPES, type DrapeId, zoomFor } from "./imagery";
 import { closeSite, openSite } from "./site.js";
 import { benchKind, startBench } from "./quality.js";
 import { makePatch } from "./terrain.js";
+import { groundFor, groundTitle, loadTargetGround } from "./targetground";
 
 export interface SimPlace {
   name: string;
@@ -116,7 +117,17 @@ export async function openRoverSim(opts: SimOptions): Promise<SimHandle> {
         return { spec, img: null, ctx: null, error: (e as Error).message };
       }
     })();
-    const [reg, soil, ground, imagery] = await Promise.all([registry, soilP, groundP, imgP]);
+    // The Mars or Moon ground shown beside the Earth place (targetground.ts). If it cannot be loaded, the simulation still opens on the Earth ground alone.
+    const choice = groundFor(target.id, target.body, target.lat);
+    const targetP = loadTargetGround(choice.targetId, { signal: abort.signal }).then(
+      (tg) => ({ ...tg, choice, title: groundTitle(choice, tg.target) }),
+      (e: Error) => {
+        if (e.name === "AbortError") throw e;
+        console.error(e);
+        return null;
+      },
+    );
+    const [reg, soil, ground, imagery, targetGround] = await Promise.all([registry, soilP, groundP, imgP, targetP]);
     if (closed) return handle;
     D.rovers = reg;
     const prov = ground.prov;
@@ -137,8 +148,8 @@ export async function openRoverSim(opts: SimOptions): Promise<SimHandle> {
       similarity: opts.similarity ?? null,
     };
     root.querySelector(".rs-load")?.remove();
-    await openSite({ host: root, ctx, patch, imagery: imagery && imagery.img ? imagery : null, onBack: () => void close() });
-    (window as unknown as Record<string, unknown>).__rsim = { patch, prov, ctx, imagery };
+    await openSite({ host: root, ctx, patch, imagery: imagery && imagery.img ? imagery : null, targetGround, onBack: () => void close() });
+    (window as unknown as Record<string, unknown>).__rsim = { patch, prov, ctx, imagery, targetGround };
     const bk = benchKind();
     if (bk) runBench(bk, abort.signal).catch((e) => console.error("benchmark failed", e));
   } catch (e) {

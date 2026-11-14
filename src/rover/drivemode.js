@@ -34,7 +34,7 @@ export function openChooser(V) {
   const place = V.ctx.place;
   const paintCards = () => {
   const par = roverPar(), card = (i, kind, name, line, g) => `<button class="rcard dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span></div></button>`;
-  $('dcCards').innerHTML = V.sides.map((s, i) => card(i, s.key === 'target' ? `${V.ctx.target.bodyName} gravity` : 'Earth gravity', place.name, s.key === 'target' ? `This Earth ground at the gravity of ${V.ctx.target.name}` : 'This Earth ground at its own gravity', s.g)).join('');
+  $('dcCards').innerHTML = V.sides.map((s, i) => card(i, sideShort(V, s), sideName(V, s), s.dvLine, s.g)).join('');
   $('dcCards').querySelectorAll('.dc-pick').forEach(b => { b.onclick = () => startDrive(+b.dataset.i); });
   };
   paintCards(); mountRoverLine($('dcRover'), paintCards);
@@ -55,7 +55,7 @@ async function startDrive(i) {
   M.main = i; M.other = V.sides.length > 1 ? 1 - i : -1;
   M.saved = V.cams.map(c => ({ p: c.camera.position.clone(), q: c.camera.quaternion.clone(), t: c.controls.target.clone() }));
   const par = roverPar();
-  M.sims = V.sides.map(sd => new DriveSim(sd.patch, par, { g: sd.g, mu: +($('muE') || { value: frictionFromSoil(sd.soil) }).value, soil: sd.soil, mass: par.mass_kg, S: sd.S }));
+  M.sims = V.sides.map(sd => new DriveSim(sd.patch, par, { g: sd.g, mu: +($(sd.muId) || { value: frictionFromSoil(sd.soil) }).value, soil: sd.soil, mass: par.mass_kg, S: sd.S }));   // each pane: its own ground, gravity, soil and friction
   applyMass();
   V.sides.forEach(s => { s.marker.visible = false; s.line.visible = s.lineOn.visible = false; s.rover.root.visible = true; s.pose.init = false; });
   M.dust = V.sides.map((s, j) => makeDust(s, j));
@@ -114,7 +114,7 @@ function makeDust(side, j) {
     dispose() { side.scene.remove(pts); geo.dispose(); mat.dispose(); },
     clear() { life.fill(0); geo.attributes.aLife.needsUpdate = true; },
     update(dt, sim, scale, rover, par) {
-      const g = sim.g, f = sim.fit, vis = Math.abs(sim.v) * scale, rate = (vis * 22 + sim.spin * 70 + (sim.sliding ? 50 : 0)) * (0.4 + M.V.ctx.traits.dust) * siteQuality.level().dust;
+      const g = sim.g, f = sim.fit, vis = Math.abs(sim.v) * scale, rate = (vis * 22 + sim.spin * 70 + (sim.sliding ? 50 : 0)) * (0.4 + (side.traits || M.V.ctx.traits).dust) * siteQuality.level().dust;
       acc += rate * dt; const half = sim.p.size / 2;
       while (acc >= 1) {
         acc -= 1; const k = n++ % N, wp = sim.W[Math.floor(rnd() * sim.W.length)], fx = f.fx, fz = f.fz, rx = f.rx, rz = f.rz;
@@ -189,7 +189,10 @@ const ROWS = [
   ['press', 'Ground pressure', 'kPa', false, true, 5, v => v.toFixed(1)],
 ];
 const mmss = s => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), q = Math.floor(s % 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(q).padStart(2, '0'); };
-function names() { const V = M.V; return V.sides.map(s => ({ short: s.key === 'target' ? `${V.ctx.target.bodyName} gravity` : 'Earth gravity', name: V.ctx.place.name, g: s.g })); }
+/** A pane's ground in words: the target's own ground (its name), or the Earth place (at one of two gravities when both panes show it). */
+const sideName = (V, s) => (s.key === 'target' && !s.same && V.tg ? V.tg.target.name : V.ctx.place.name);
+const sideShort = (V, s) => (s.same ? (s.key === 'target' ? `${V.ctx.target.bodyName} gravity` : 'Earth gravity') : s.key === 'target' ? `${V.ctx.target.bodyName} ground` : 'Earth ground');
+function names() { const V = M.V; return V.sides.map(s => ({ short: sideShort(V, s), name: sideName(V, s), g: s.g })); }
 
 function buildUI() {
   const nm = names(), par = roverPar(), mn = nm[M.main], ot = nm[M.other] || mn;
