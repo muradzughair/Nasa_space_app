@@ -141,14 +141,16 @@ export const store = createStore({
   atlas: { open: true, body: restored ? "moon" : "mars", profiles: { mars: "mars-modern", moon: restored ?? "moon-maria" }, siteId: null, listOpen: false },
   heatmap: { on: false, opacity: 0.8, threshold: 0 },
   verify: { open: false, view: "list", requestId: null },
+  // Defaults for a first visit (nothing saved yet). A browser that already saved its settings keeps them:
+  // loadSettings() lays the saved values over these, so changing a default here never overrides a saved choice.
   settings: loadSettings({
     imagery: "esri",
     moonImagery: "moon-wac",
     marsImagery: "mars-viking",
     labels: true,
-    terrain: true,
-    lighting: true,
-    atmosphere: true,
+    terrain: false,
+    lighting: false,
+    atmosphere: false,
     autoRotate: true,
   }),
   activeImagery: null,
