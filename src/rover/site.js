@@ -739,6 +739,19 @@ function drawCharts(kf) {
     g.globalAlpha = 1;
   });
 }
+/** The old app's results side by side: each drive's time, energy, slip, sinkage, largest tilt and whether it got stuck. Target, Earth, Earth at equal wheel load. */
+function resultsTable(run, tName) {
+  const cols = [[tName, run.T.totals, 't'], ['Earth', run.Er.totals, 'e'], ['Earth, equal load', run.Eq.totals, 'e']];
+  const r = (label, f) => `<tr><td>${label}</td>${cols.map(([, T]) => `<td>${f(T)}</td>`).join('')}</tr>`;
+  const stuck = T => T.reachable ? 'No' : `<span class="stuck" title="${esc((T.blockers || []).join('; '))}">Yes</span>`;
+  return `<table class="res3"><tr><th></th>${cols.map(([n, , c]) => `<th class="${c}">${n}</th>`).join('')}</tr>
+    ${r('Drive time', T => `${(T.time / 60).toFixed(0)} min`)}
+    ${r('Energy used', T => `${T.energy_Wh.toFixed(0)} Wh`)}
+    ${r('Average slip', T => `${T.slip_mean.toFixed(1)} %`)}
+    ${r('Wheel sinkage', T => `${T.sink_mean_mm.toFixed(1)} mm`)}
+    ${r('Largest tilt', T => `${T.tilt_max.toFixed(1)}°`)}
+    ${r('Got stuck', stuck)}</table>`;
+}
 const fv = (x, r) => (r.unit === '°' || r.unit === '%' || r.unit === ' min' || r.unit === ' mm' || r.unit === ' Wh' || r.unit === ' kPa') ? x.toFixed(1) : Math.round(x).toLocaleString();
 /** The verdict. Two panes: the old verdict() of the two drives (the same ground, so only gravity differs). One pane: the run's own reachability verdict. */
 function showVerdict() {
@@ -746,8 +759,12 @@ function showVerdict() {
   if (V.sides.length > 1) {
     const v = verdict(run.T, run.Er, run.Eq, run.ctx), cls = v.match >= 80 ? 'good' : v.match >= 60 ? 'mid' : 'bad';
     const tag = r => r.status === 'rover' ? '<span class="tagm gr">build</span>' : r.status === 'match' ? '<span class="tagm ok">match</span>' : r.status === 'mismatch' ? '<span class="tagm no">mismatch</span>' : '<span class="tagm gr">gravity</span>';
-    $('verdict').innerHTML = `<div class="big ${cls}">${Math.round(v.match)}/100 &middot; ${v.label} ${info('How alike the two drives are, from 0 to 100. Both use the same ground, so any difference comes from gravity alone.', 'About the match score')}</div>
-    <table><tr><th>Metric</th><th>${esc(V.ctx.target.bodyName)} g</th><th>Earth g</th><th></th></tr>${v.rows.map(r => `<tr><td>${r.label}</td><td>${fv(r.a, r)}${r.unit}</td><td>${fv(r.b, r)}${r.unit}</td><td>${tag(r)}</td></tr>`).join('')}</table>
+    const cmp = comparing(), tName = cmp ? `${BODY[V.tg.target.body]} ground` : `${esc(V.ctx.target.bodyName)} g`, eName = cmp ? 'Earth' : 'Earth g';
+    const why = cmp ? `The same rover drives on the ${BODY[V.tg.target.body]} ground and on this Earth place. Big differences mean Earth testing here would mislead.`
+      : 'How alike the two drives are, from 0 to 100. Both use the same ground, so any difference comes from gravity alone.';
+    $('verdict').innerHTML = `<div class="big ${cls}">${Math.round(v.match)}/100 &middot; ${v.label} ${info(why, 'About the comparison')}</div>
+    ${cmp ? `<p class="verdict-line">${esc(v.recommendation)}</p>${resultsTable(run, tName)}<b>Match by metric</b>` : ''}
+    <table><tr><th>Metric</th><th>${tName}</th><th>${eName}</th><th></th></tr>${v.rows.map(r => `<tr><td>${r.label}</td><td>${fv(r.a, r)}${r.unit}</td><td>${fv(r.b, r)}${r.unit}</td><td>${tag(r)}</td></tr>`).join('')}</table>
     ${v.mismatches.length ? `<b>Mismatches</b><ul>${v.mismatches.map(m => `<li>${comparing() ? m : m.replace('on the target ground', `at ${esc(V.ctx.target.bodyName)} gravity`).replace('on the Earth site', 'at Earth gravity')}</li>`).join('')}</ul>` : '<b>Mismatches</b><ul><li>None on the terrain-driven metrics.</li></ul>'}
     <b>Gravity</b><p class="hint">${v.gravityNote}</p>`;
     $('vpVerdictBody').innerHTML = `<div class="big ${cls}">${Math.round(v.match)}/100</div><div><b>${v.label}</b><div class="hint">${v.mismatches.length ? v.mismatches[0] : 'The two drives behave alike on the terrain-driven metrics.'}</div></div>`;

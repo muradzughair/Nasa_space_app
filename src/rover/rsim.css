@@ -488,3 +488,9 @@
 /* ---- licence and attribution lines, bottom of the details panel */
 .rsim .site-credits { margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.45; }
 .rsim .site-credits p { margin: 0 0 4px; }
+/* ---- results of the target and Earth drives side by side (target ground vs Earth) */
+.rsim .verdict .verdict-line { margin: var(--s2) 0; line-height: 1.45; color: var(--text); font-size: var(--t-sm); }
+.rsim .verdict table.res3 th.t { color: var(--target); }
+.rsim .verdict table.res3 th.e { color: var(--earth); }
+.rsim .verdict table.res3 th { font-size: var(--t-xs); line-height: 1.25; vertical-align: bottom; }
+.rsim .verdict table.res3 .stuck { color: var(--bad); font-weight: 650; cursor: help; }
