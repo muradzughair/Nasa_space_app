@@ -5,6 +5,17 @@
   color: var(--ink);
 }
 
+/* The switch and its "!" share the row and its top rule. */
+.heatmap-switch-row {
+  margin-top: 8px;
+  border-top: 1px solid var(--edge);
+}
+
+.heatmap-switch-row .heatmap-switch {
+  margin-top: 0;
+  border-top: 0;
+}
+
 .heatmap-body {
   padding-bottom: 6px;
 }
@@ -32,7 +43,7 @@
 
 .heatmap-slider {
   display: grid;
-  grid-template-columns: 92px 1fr 38px;
+  grid-template-columns: 116px 1fr 38px;
   align-items: center;
   gap: 8px;
   min-height: 30px;

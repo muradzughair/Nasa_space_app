@@ -7,6 +7,7 @@ import { CUSTOM_KEYS, LABEL, UNIT, effective } from './rovercfg.js';
 import { estimate } from './soilmech.js';
 import { crrFromSoil, analyze } from './sim.js';
 import { ROOT } from './data.js';
+import { info } from './info.js';
 
 const $ = id => document.getElementById(id);
 const PLANET = { mars: 'Mars rover', moon: 'Moon rover', test: 'Earth test rover' };
@@ -21,10 +22,10 @@ export function initRoverUI(hooks) {
   const host = $('site');
   host.insertAdjacentHTML('beforeend', `
     <div id="rvPicker" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rvPickT"><div class="modal-card rv-card"><button class="btn ghost close" data-close aria-label="Close">Close</button>
-      <h1 id="rvPickT">Choose a rover</h1><p class="hint">Real rovers use NASA models and published figures where they could be checked; every figure that could not is tagged assumed. Any rover can be tried on any ground.</p><div class="rv-cards" id="rvCards"></div></div></div>
+      <h1 id="rvPickT">Choose a rover ${info("Each rover uses NASA's 3D model and published figures where they exist. Any rover can be tried on any ground.", 'About the rovers')}</h1><div class="rv-cards" id="rvCards"></div></div></div>
     <div id="rvDrawer" class="rv-drawer hidden" role="dialog" aria-modal="false" aria-labelledby="rvDrawT"><div class="rv-dhead"><h2 id="rvDrawT">Customize rover</h2><button class="icon-btn" data-close aria-label="Close the customize panel">&times;</button></div><div class="rv-dbody" id="rvDrawBody"></div></div>
     <div id="rvCompare" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rvCmpT"><div class="modal-card rv-card wide"><button class="btn ghost close" data-close aria-label="Close">Close</button>
-      <h1 id="rvCmpT">Compare two rover builds</h1><p class="hint">Build A and build B drive the same route on one ground. Speed, energy, sinkage and the verdict come from the same screening model as the simulation.</p><div id="rvCmpBody"></div></div></div>`);
+      <h1 id="rvCmpT">Compare two rover builds ${info('Both builds drive the same route on the same ground. Green marks the better of the two values. Reachable means the route fits the battery, the slope limit and the pushing force.', 'About comparing builds')}</h1><div id="rvCmpBody"></div></div></div>`);
   for (const id of ['rvPicker', 'rvCompare']) { const m = $(id); m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) m.classList.add('hidden'); }); }
   $('rvDrawer').addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDrawer(); });
   document.addEventListener('keydown', onEsc);
@@ -87,18 +88,16 @@ function readout(cfg) {
     ${row('Ground pressure', e => e.pressure_kPa.toFixed(1) + ' kPa', 'wheel load divided by wheel width times contact length')}
     ${row('Expected sinkage', e => (1000 * e.sinkage_m).toFixed(1) + ' mm', 'simplified Bekker sinkage on the ground class, assumed soil constants')}
     ${row('Top speed here', e => e.canMove ? e.topSpeed.toFixed(3) + ' m/s' : 'stuck', 'flat ground, force balance with motor, power and traction limits')}
-    ${row('Range on battery', e => e.canMove ? km(e.rangeM) : '0 m', 'flat ground at that speed, drive plus base power')}</tbody></table>
-    <p class="hint">All of this is the screening model: soil constants are assumed and simplified (Bekker sinkage), not measured at the site.</p>`;
+    ${row('Range on battery', e => e.canMove ? km(e.rangeM) : '0 m', 'flat ground at that speed, drive plus base power')}</tbody></table>`;
 }
 function paintDrawer(keepScroll) {
   const body = $('rvDrawBody'), top = body.scrollTop, cfg = R.cfg, row = R.reg.rovers[cfg.id];
   body.innerHTML = `
     <div class="rv-sum2">${roverSummary(cfg)}${cfg.note ? `<p class="hint">${esc(cfg.note)}</p>` : ''}${cfg.kind === 'custom' ? `<p class="hint">Changed from the ${esc(row.display_name)} preset: ${cfg.changed.map(k => LABEL[k].toLowerCase()).join(', ')}. This is a custom build, not a real mission rover.</p>` : ''}</div>
     <h3>Rover</h3><div class="rv-presets">${R.reg.order.map(id => `<button class="btn small${id === cfg.id ? ' on' : ''}" data-pre="${id}">${esc(R.reg.rovers[id].display_name)}</button>`).join('')}</div>
-    <h3>Build (changes the physics)</h3>${CUSTOM_KEYS.map(k => slider(cfg, k)).join('')}
-    <p class="hint">Ranges are limited to realistic values for ${esc(PLANET[cfg.planet].toLowerCase())}s. Motor power sets the drive force and power cap, top speed is the gear (higher gear, less force). Wheel size and width change sinkage.</p>
+    <h3>Build (changes the physics) ${info('Sliders stay within realistic limits. More motor power means more pushing force, and a higher top speed means less. Bigger, wider wheels sink less.', 'About the build sliders')}</h3>${CUSTOM_KEYS.map(k => slider(cfg, k)).join('')}
     <h3>Fixed figures of the preset</h3><div class="rv-fixed">${['base_power_w', 'ground_clearance_m', 'max_slope_deg', 'drive_force_max_N', 'drive_efficiency'].map(k => `<div><span>${LABEL[k]}</span><b>${fmt(k, cfg.fig[k].value)}</b></div>`).join('')}</div>
-    <h3>Live readout on each ground</h3><div id="rvRead">${readout(cfg)}</div>
+    <h3>Live readout on each ground ${info('Quick estimates for each ground. The soil numbers are simplified guesses, not measured here.', 'About the live readout')}</h3><div id="rvRead">${readout(cfg)}</div>
     <h3>Looks only (no effect on the physics)</h3>
     <div class="rv-row"><label for="rv_col">Body colour</label><input id="rv_col" type="color" value="${cfg.cos.color}"><span></span><span class="rv-t"></span></div>
     <div class="rv-row"><label for="rv_dust">Dust level</label><input id="rv_dust" type="range" min="0" max="1" step="0.05" value="${cfg.cos.dust}"><output>${(100 * cfg.cos.dust).toFixed(0)} %</output><span class="rv-t"></span></div>
@@ -157,8 +156,7 @@ function paintCompare() {
     ${row('Battery', v => v.toFixed(0) + ' Wh', r => r.T.battery_wh, false)}
     ${row('Mean sinkage', v => v.toFixed(1) + ' mm', r => r.T.sink_mean_mm, true, 'simplified Bekker sinkage, assumed soil constants')}
     ${row('Ground pressure', v => v.toFixed(1) + ' kPa', r => r.T.press_kPa, true)}
-    <tr><td>Verdict</td><td>${verdict(a)}</td><td>${verdict(b)}</td></tr></tbody></table>
-    <p class="hint">Green marks the better value when the two differ by more than 1 percent. Verdict: reachable means the route fits the battery, the slope limit and the available drive force. Screening model, assumed soil constants.</p>`;
+    <tr><td>Verdict</td><td>${verdict(a)}</td><td>${verdict(b)}</td></tr></tbody></table>`;
   body.oninput = e => { const t = e.target; if (!t.dataset.k) return; const w = t.closest('[data-w]').dataset.w, row = R.reg.rovers[cmp[w].id]; const v = Math.max(row.limits[t.dataset.k][0], Math.min(row.limits[t.dataset.k][1], +t.value)); cmp[w] = { ...cmp[w], ov: { ...cmp[w].ov, [t.dataset.k]: v } }; t.nextElementSibling.textContent = fmt(t.dataset.k, v); repaintTable(); };
   body.onchange = e => { if (e.target.matches('[data-sel]')) { const w = e.target.closest('[data-w]').dataset.w; cmp[w] = { id: e.target.value, ov: {}, cos: {} }; paintCompare(); } };
   body.onclick = e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.g) { cmp.ground = +b.dataset.g; paintCompare(); } else if (b.dataset.wc) { const w = b.closest('[data-w]').dataset.w; cmp[w] = { ...cmp[w], ov: { ...cmp[w].ov, wheel_count: +b.dataset.wc } }; paintCompare(); } };

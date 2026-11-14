@@ -14,6 +14,7 @@ import { refreshAfterDrive, setSitePlaying, siteHelpers, siteQuality } from './s
 import { motion } from './globeview.js';
 import { R as RS } from './rovers.js';
 import { mountRoverLine } from './roverui.js';
+import { info } from './info.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -201,14 +202,13 @@ function buildUI() {
     <div class="dv-hb" id="dvHb"><div class="dv-warns" id="dvWarns" aria-live="polite"></div>
     <table class="dv-tab"><thead><tr><th></th><th><span class="dv-dot" style="background:${COL[M.main]}"></span>${mn.short}</th><th class="cmp"><span class="dv-dot" style="background:${COL[M.other]}"></span>${ot.short}</th><th class="cmp">Diff</th></tr></thead><tbody id="dvRows">${ROWS.map(r => `<tr data-k="${r[0]}" data-basic="${r[3] ? 1 : 0}"><td>${r[1]}</td><td class="v"></td><td class="cmp o"></td><td class="cmp d"></td></tr>`).join('')}
     <tr data-k="battery" data-basic="1"><td>Battery</td><td class="v"></td><td class="cmp o"></td><td class="cmp d"></td></tr></tbody></table>
-    <div class="dv-cmpnote cmp">Comparison: the same inputs on ${ot.short} (g ${ot.g}). Paths diverge, so use Resync.</div>
-    <div class="dv-btns"><button class="btn ghost small" id="dvResync">${M.other >= 0 ? 'Resync both to start' : 'Back to the start'}</button><button class="tog" id="dvRumble" aria-pressed="false" title="Needs a controller with a vibration motor (Chrome or Edge)"><i class="sw"></i>Vibration</button>${M.other >= 0 && M.V.sides.some(sd => sd.key === 'earth') ? '<button class="tog" id="dvEq" aria-pressed="false" title="Give the Earth rover the mass that reproduces the target wheel load"><i class="sw"></i>Equal wheel load on Earth</button>' : ''}</div></div>`;
+    <div class="dv-btns"><button class="btn ghost small" id="dvResync">${M.other >= 0 ? 'Resync both to start' : 'Back to the start'}</button>${M.other >= 0 ? info('The second rover gets the same moves at the other gravity. Their paths slowly drift apart, so Resync puts both back at the start.', 'About the comparison rover') : ''}<button class="tog" id="dvRumble" aria-pressed="false" title="Needs a controller with a vibration motor (Chrome or Edge)"><i class="sw"></i>Vibration</button>${M.other >= 0 && M.V.sides.some(sd => sd.key === 'earth') ? '<button class="tog" id="dvEq" aria-pressed="false" title="Give the Earth rover the mass that reproduces the target wheel load"><i class="sw"></i>Equal wheel load on Earth</button>' : ''}</div></div>`;
   $('dvHudToggle').onclick = () => { const c = $('dvHud').classList.toggle('collapsed'); $('dvHudToggle').setAttribute('aria-expanded', c ? 'false' : 'true'); };
   $('dvResync').onclick = resetAll;
   const tg = (id, on, fn) => { const b = $(id); if (!b) return; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.classList.toggle('on', v); b.setAttribute('aria-pressed', v); fn(v); }; };
   tg('dvRumble', M.rumble, v => { M.rumble = v; M.input.rumble = v; toast(v ? 'Vibration on (needs a controller with a rumble motor)' : 'Vibration off'); });
   tg('dvEq', M.equalLoad, v => { M.equalLoad = v; applyMass(); toast(v ? 'Earth rover mass reduced to the target wheel load' : 'Same rover mass on both grounds'); });
-  $('dvFoot').innerHTML = `<span>${mn.name}, ${mn.short} g ${mn.g} m/s&sup2;</span><span>Rover ${roverName()}</span><span id="dvMass"></span><span class="dv-phys">Physics: screening model (one friction coefficient, simplified assumed-soil sinkage, not validated). Drive force, power and battery figures are assumptions (verified: false in rovers.json); the battery bar is an illustrative budget. Soil inputs are chosen by rule from the 0.5° grid or assumed.</span>`;
+  $('dvFoot').innerHTML = `<span>${mn.name}, ${mn.short} g ${mn.g} m/s&sup2;</span><span>Rover ${roverName()}</span><span id="dvMass"></span><span class="dv-phys">Physics ${info('A quick estimate, not an exact rover simulation. The soil is kept simple, and the power and battery figures are approximate.', 'About the physics')}</span>`;
   $('dvPipLabel').innerHTML = M.other >= 0 ? `<span class="dv-dot" style="background:${COL[M.other]}"></span>${ot.short}: same inputs, same ground, other gravity` : '';
   $('dvSheet').innerHTML = `<h3>Controls</h3><table>${MAPPING.map(r => `<tr><td><kbd>${r[0]}</kbd></td><td>${r[1]}</td><td class="kb">${r[2]}</td></tr>`).join('')}</table><p class="hint">Connect a DualSense (or any standard gamepad) by USB-C or Bluetooth, then press a button. Adaptive triggers are not available in the browser; vibration is optional.</p><button class="btn ghost small" id="dvSheetClose">Close (H)</button>`;
   $('dvSheetClose').onclick = () => sheet(false);

@@ -875,19 +875,6 @@ button.targetbar-row:hover {
   margin-top: 14px;
 }
 
-.atlas-section p.atlas-gaps-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--ink-faint);
-}
-
-.targetbar-hint {
-  margin: 10px 0 2px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--ink-dim);
-}
-
 .score-button {
   width: 100%;
   margin-top: 14px;
@@ -897,13 +884,6 @@ button.targetbar-row:hover {
 
 .target-button {
   margin-top: 14px;
-}
-
-.target-hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-dim);
 }
 
 .target-card {
@@ -1000,12 +980,6 @@ button.targetbar-row:hover {
 .rover-sim-button {
   width: 100%;
 }
-.rover-sim-note {
-  margin: 6px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-faint);
-}
 .rover-video-slot {
   display: grid;
   place-items: center;
@@ -1035,4 +1009,90 @@ button.targetbar-row:hover {
 }
 .rover-video-note {
   color: var(--ink-dim);
+}
+
+/* ------------------------------------------------------- "!" info buttons */
+
+/*
+ * A small round "!" beside a control or a title (components/InfoTip.tsx and
+ * rover/info.js). Its note is one element on <body>, styled here because this
+ * sheet is always loaded; the rover screens restyle the button in rsim.css.
+ */
+.info-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-dim);
+  font: 700 10.5px/1 var(--font);
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: middle;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background-color 0.15s;
+}
+
+.info-btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
+
+.info-btn[aria-expanded="true"] {
+  color: #0b0e14;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.info-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.info-pop {
+  position: fixed;
+  z-index: 3000;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(14, 17, 25, 0.97);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color: #e6eaf2;
+  font: 400 12.5px/1.5 "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  animation: info-in 0.12s ease-out;
+}
+
+@keyframes info-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/* A row whose main control is a button: the "!" sits beside it, never inside it. */
+.with-info {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.with-info > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.with-info > .info-btn {
+  margin-left: 8px;
 }

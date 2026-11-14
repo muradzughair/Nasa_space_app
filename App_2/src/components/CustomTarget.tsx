@@ -14,6 +14,7 @@ import { loadMoon } from "../analog/moon";
 import { formatLat, formatLon } from "../geo/coords";
 import { switchPlanet } from "../state/navigation";
 import { type Selection, showToast, store, updateAtlas, updateHeatmap } from "../state/store";
+import { InfoTip } from "./InfoTip";
 
 /** The fields of a custom target: name, value and source, one row per field. */
 export function ProvenanceList({ rows }: { rows: ProvenanceRow[] }) {
@@ -74,9 +75,10 @@ export function MoonTargetAction({ selection }: { selection: Selection }) {
   if (!target) {
     return (
       <>
+        <div className="with-info target-button">
         <button
           type="button"
-          className="card-action is-primary target-button"
+          className="card-action is-primary"
           disabled={state === "busy"}
           onClick={() => {
             setState("busy");
@@ -92,14 +94,12 @@ export function MoonTargetAction({ selection }: { selection: Selection }) {
         >
           {state === "busy" ? "Reading the lunar grid…" : "Use this point as the target"}
         </button>
-        {state === "failed" ? (
-          <p className="cell-note">The lunar grid (moon.bin) could not be loaded, so no target was made. Nothing is assumed in its place.</p>
-        ) : (
-          <p className="target-hint">
-            Makes this point a version of the Moon that Earth can be compared with. Its terrain is read from LOLA and its mare or highland class from the LROC mare map; minerals, landform
-            weights and albedo are inherited from the matching fixed profile and labelled so.
-          </p>
-        )}
+        <InfoTip
+          label="About custom targets"
+          text="Makes this point a Moon site that Earth can be compared with. Its terrain and surface type are read from lunar maps. Other values come from the closest standard Moon site."
+        />
+        </div>
+        {state === "failed" && <p className="cell-note">The lunar grid (moon.bin) could not be loaded, so no target was made.</p>}
       </>
     );
   }

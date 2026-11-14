@@ -4,6 +4,7 @@ import { PREMADE_VIDEO_TOP_PERCENT, premadeVideoSource, type PremadeVideoPlan } 
 import type { Profile } from "../analog/scoring";
 import type { GlobeController } from "../globe/GlobeController";
 import { showToast, useStore } from "../state/store";
+import { InfoTip } from "./InfoTip";
 
 interface Props {
   globe: GlobeController | null;
@@ -48,13 +49,14 @@ export function SimulateRover({ globe, place, profile, water }: Props) {
     }
   };
   return (
-    <div className="rover-sim">
+    <div className="rover-sim with-info">
       <button type="button" className="card-action rover-sim-button" disabled={busy} onClick={() => void start()}>
         {busy ? "Rover simulation open…" : "Simulate a rover here"}
       </button>
-      <p className="rover-sim-note">
-        A screening model with simplified soil behaviour on the real elevation around this point (Copernicus DEM, about 30 m; finer detail synthetic and labelled). Downloads about 3 to 10 MB when opened.
-      </p>
+      <InfoTip
+        label="About the rover simulation"
+        text="Opens a 3D view of the real ground around this point, where a rover can drive across it. It downloads about 3 to 10 MB."
+      />
     </div>
   );
 }

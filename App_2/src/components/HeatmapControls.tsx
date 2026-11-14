@@ -8,6 +8,7 @@ import type { Profile } from "../analog/scoring";
 import type { GlobeController } from "../globe/GlobeController";
 import { store, updateHeatmap, useStore } from "../state/store";
 import { useGrid } from "./InfoCard";
+import { InfoTip } from "./InfoTip";
 
 /**
  * Every land cell scored against a profile, once wanted. While another
@@ -109,10 +110,16 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
 
   return (
     <div className="heatmap">
-      <button type="button" role="switch" aria-checked={heatmap.on} className="targetbar-row heatmap-switch" onClick={() => updateHeatmap({ on: !heatmap.on })}>
-        <span>Show similarity heatmap</span>
-        <span className="switch" />
-      </button>
+      <div className="with-info heatmap-switch-row">
+        <button type="button" role="switch" aria-checked={heatmap.on} className="targetbar-row heatmap-switch" onClick={() => updateHeatmap({ on: !heatmap.on })}>
+          <span>Show similarity heatmap</span>
+          <span className="switch" />
+        </button>
+        <InfoTip
+          label="About the heatmap"
+          text="Colours every land area on Earth by how similar it is to the chosen site. With it off, click any spot on Earth and press Score this spot."
+        />
+      </div>
 
       {heatmap.on && (
         <div className="heatmap-body">
@@ -131,7 +138,10 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
             <output>{Math.round(heatmap.opacity * 100)}%</output>
           </label>
           <label className="heatmap-slider">
-            <span>Highlight from</span>
+            <span>
+              Highlight from
+              <InfoTip label="About highlight from" text="Areas scoring below this value are drawn faint. Their scores do not change." />
+            </span>
             <input type="range" min={0} max={0.6} step={0.01} value={heatmap.threshold} onChange={(e) => updateHeatmap({ threshold: Number(e.target.value) })} />
             <output>{percent(heatmap.threshold)}</output>
           </label>
@@ -139,6 +149,10 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
           <div className="heatmap-legend" aria-label="Heatmap legend">
             <div className="heatmap-legend-title">
               Similarity score to {profile.body === "moon" ? "the Moon" : "Mars"}, {versionLabel(profile)}
+              <InfoTip
+                label="About the heatmap colours"
+                text="Each coloured cell covers a region about 50 km wide and gets one score for that whole region. The white dots are reference sites with finer data, so their score can differ from the cell around them."
+              />
             </div>
             <div className="heatmap-ramp" style={{ background: rampCss() }} />
             <div className="heatmap-ticks">
@@ -149,35 +163,30 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
             <ul className="heatmap-keys">
               {heatmap.threshold > 0 && (
                 <li>
-                  <i style={{ background: belowCss }} /> Scored land below {percent(heatmap.threshold)} (still scored; only drawn fainter)
+                  <i style={{ background: belowCss }} /> Below {percent(heatmap.threshold)} (drawn fainter)
                 </li>
               )}
               <li>
-                <i className="is-empty" /> No colour: sea, or land with no grid cell. No score, which is not a low score.
+                <i className="is-empty" /> No colour: sea, or no data
               </li>
               <li>
-                <i className="is-video" /> White outline: the top {PREMADE_VIDEO_TOP_PERCENT}% of land cells for {targetName(profile)}, where pre-made rover videos are planned; still to be recorded
-                {videoPlaces != null ? ` (${videoPlaces.toLocaleString("en-US")} cells)` : ""}.
+                <i className="is-video" /> White outline: top {PREMADE_VIDEO_TOP_PERCENT}% for {targetName(profile)}, rover videos planned
+                {videoPlaces != null ? ` (${videoPlaces.toLocaleString("en-US")} cells)` : ""}
               </li>
             </ul>
           </div>
 
           {stats && grid && (
             <p className="heatmap-note">
-              {stats.count.toLocaleString("en-US")} land cells of {grid.header.cellDegrees}° (about {Math.round(111.2 * grid.header.cellDegrees)} km), one colour per cell, not smoothed. Median{" "}
+              {stats.count.toLocaleString("en-US")} land cells of {grid.header.cellDegrees}° (about {Math.round(111.2 * grid.header.cellDegrees)} km). Median{" "}
               {percent(stats.median)}, 99th percentile {percent(stats.p99)}, best {percent(stats.best)}.{" "}
               {heatmap.threshold > 0 && (
                 <>
                   {stats.above.toLocaleString("en-US")} cells ({((stats.above / stats.count) * 100).toFixed(stats.above / stats.count < 0.1 ? 1 : 0)}% of land) score {percent(heatmap.threshold)} or more.{" "}
                 </>
               )}
-              Click a cell for its breakdown.
             </p>
           )}
-          <p className="heatmap-note">
-            A cell's colour is the score of its sampled regional data, from the same function as the cards. It does not guarantee that score at every coordinate inside the cell, and reference sites
-            (white dots) use finer measurements, so their cards can differ from the cell beneath them.
-          </p>
         </div>
       )}
     </div>

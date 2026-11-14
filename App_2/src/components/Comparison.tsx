@@ -2,6 +2,7 @@ import { versionLabel } from "../analog/custom";
 import { type AtlasData, type Evaluation, type GroupScore, percent, type Profile } from "../analog/data";
 import { Radar } from "../analog/Radar";
 import { groupsOf } from "../analog/scoring";
+import { InfoTip } from "./InfoTip";
 
 /** A group at or above this similarity is listed as a strength; below WEAK, as a breakdown. */
 const STRONG = 0.66;
@@ -90,7 +91,13 @@ export function Comparison({ data, profile, evaluation, label, pressure }: Props
             </li>
           ))}
         </ul>
-        <h3 className="atlas-gaps">Never matched anywhere on Earth</h3>
+        <h3 className="atlas-gaps">
+          Never matched anywhere on Earth
+          <InfoTip
+            label="About what is never matched"
+            text="These are left out of the score. So a high score means very similar for a place on Earth, not the same as Mars or the Moon."
+          />
+        </h3>
         <ul>
           <li>
             <strong>Gravity</strong> {earth.gravity} m/s² here, {body.gravity} on {where(profile)}: loads, traction and dust behave as if {(earth.gravity / body.gravity).toFixed(1)} times
@@ -110,13 +117,16 @@ export function Comparison({ data, profile, evaluation, label, pressure }: Props
             <strong>Day length</strong> one day on {where(profile)} lasts {body.day}.
           </li>
         </ul>
-        <p className="atlas-gaps-note">
-          These are left out of the score, so {percent(evaluation.overall)} means "this similar among places on Earth", not "{percent(evaluation.overall)} like {where(profile)}".
-        </p>
       </section>
 
       <section className="atlas-section">
-        <h3>Every metric group</h3>
+        <h3>
+          Every metric group
+          <InfoTip
+            label="About metric groups"
+            text="Each group compares one kind of feature, such as terrain or rock. The percentage beside its name is how much it counts. One poor match pulls the whole score down."
+          />
+        </h3>
         <dl className="atlas-dims">
           {groups.map((g) => (
             <div key={g.id} title={g.how}>
@@ -146,7 +156,7 @@ export function Comparison({ data, profile, evaluation, label, pressure }: Props
         </dl>
         <p className="cell-scale">
           Data confidence: {percent(measured)} of the score rests on measured or mapped values, {percent(proxy)} on estimates inferred from other data
-          {none > 0.005 ? `, and ${percent(none)} has no data and is left out` : ""}. The groups are combined with a weighted geometric mean.
+          {none > 0.005 ? `, and ${percent(none)} has no data and is left out` : ""}.
         </p>
       </section>
     </>

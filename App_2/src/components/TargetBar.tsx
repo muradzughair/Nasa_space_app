@@ -9,6 +9,7 @@ import { updateAtlas, useStore } from "../state/store";
 import { removeTarget, TargetDetails } from "./CustomTarget";
 import { HeatmapControls } from "./HeatmapControls";
 import { ChevronIcon } from "./icons";
+import { InfoTip } from "./InfoTip";
 import { useGrid } from "./InfoCard";
 
 const BODY_NAME: Record<Body, string> = { mars: "Mars", moon: "the Moon" };
@@ -45,8 +46,6 @@ export const flyToProfile = (globe: GlobeController | null, p: Profile) =>
 export function TargetBar({ globe }: { globe: GlobeController | null }) {
   const { data, failed } = useAtlas();
   const atlas = useStore((s) => s.atlas);
-  const onEarth = useStore((s) => s.planet) === "earth";
-  const heatmapOn = useStore((s) => s.heatmap.on);
   const [newOnly, setNewOnly] = useState(false);
   // Local to the bar, so changing the body or the version never resets it.
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -117,7 +116,17 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
       </div>
 
       <label className="targetbar-row">
-        <span>Version</span>
+        <span>
+          Version
+          <InfoTip
+            label="About versions"
+            text={
+              atlas.body === "moon"
+                ? 'Choose which Moon site Earth is compared with. You can also add your own: select any point on the Moon and choose "Use this point as the target".'
+                : "Choose which Mars site Earth is compared with. Each one has its own terrain, rock and climate."
+            }
+          />
+        </span>
         <select value={profile.id} onChange={(e) => updateAtlas({ profiles: { ...atlas.profiles, [atlas.body]: e.target.value } })}>
           {versions.filter(isFixed).map((p) => (
             <option key={p.id} value={p.id}>
@@ -154,17 +163,9 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
             Remove this custom target
           </button>
         </>
-      ) : (
-        atlas.body === "moon" && <p className="target-hint">To compare with a specific lunar location, select a point on the Moon and choose "Use this point as the target".</p>
-      )}
+      ) : null}
 
       <HeatmapControls profile={profile} />
-
-      {onEarth && (
-        <p className="targetbar-hint">
-          {heatmapOn ? "Click a cell for its breakdown and to request local verification." : "Click any spot on Earth, then press Score this spot."}
-        </p>
-      )}
 
       <button
         type="button"
@@ -206,8 +207,8 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
             )}
           </ol>
           <p className="atlas-foot">
-            Similarity to {BODY_NAME[profile.body]} ({versionLabel(profile)}): a weighted geometric mean of the metric groups, so one poor match pulls the whole score down. Data built{" "}
-            {data.generated}.
+            Similarity to {BODY_NAME[profile.body]} ({versionLabel(profile)}). Data built {data.generated}.
+            <InfoTip label="About the ranking" text="Each score shows how alike a site is to the chosen Moon or Mars site. One poor match in any area pulls the whole score down." />
           </p>
         </div>
       )}

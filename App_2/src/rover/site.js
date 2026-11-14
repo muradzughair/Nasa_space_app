@@ -14,6 +14,7 @@ import { planRoute, analyze, verdict, frictionFromSoil, START, GOAL, DS } from '
 import { motion, ease } from './globeview.js';
 import { R as RS, initRovers, createInstance, updateInstance, evictExcept, onChange, selectRover, defaultForBody } from './rovers.js';
 import { initRoverUI, refreshRoverUI, disposeRoverUI } from './roverui.js';
+import { info, installInfo, closeInfo } from './info.js';
 
 const $ = id => document.getElementById(id);
 const COL_T = '#38bdf8', COL_E = '#fb923c';
@@ -89,36 +90,35 @@ export const TEMPLATE = `
           <div class="seg small" id="colorModes" role="group" aria-label="Ground colouring"></div>
           <label>Vertical x<input id="exag" type="range" min="1" max="5" step="0.5" value="1"><output id="exagO">1</output></label>
           <label>Sun elevation<input id="sunEl" type="range" min="3" max="80" step="1" value="35"><output id="sunElO">35</output></label>
-          <label>Sun azimuth<input id="sunAz" type="range" min="0" max="360" step="5" value="135"><output id="sunAzO">135</output></label>
+          <label>Sun azimuth<input id="sunAz" type="range" min="0" max="360" step="5" value="135"><output id="sunAzO">135</output>${info("The compass direction the sunlight comes from. 0 is north and 90 is east.", "About sun azimuth")}</label>
           <label class="chk"><input id="follow" type="checkbox" checked> Follow rover</label>
           <label class="chk" id="linkWrap"><input id="link" type="checkbox" checked> Link views</label>
           <button id="resetCam" class="btn ghost small" aria-label="Reset camera">Reset view</button>
+          <span id="viewInfo"></span>
         </div>
-        <div class="note-row"><span id="synthNote"></span></div>
       </div>
     </div>
     <aside class="site-side" id="siteSide" aria-label="Ground and simulation details">
-      <div class="panel-head"><span class="ph-title">Ground and simulation details</span></div>
+      <div class="panel-head"><span class="ph-title">Ground and simulation details</span>${info("This is a quick estimate, not an exact rover simulation. The soil is kept simple, so treat the results as a first check.", "About this simulation")}</div>
       <div class="panel-body">
+      <section id="simScore" class="sim-score hidden" aria-live="polite"></section>
       <section>
-        <h3>This ground</h3>
+        <h3>This ground ${info("Heights come from satellite elevation data, with points about 30 m apart. Smaller bumps are filled in smoothly by the app.", "About this ground")}</h3>
         <table id="cmpTable" class="cmp gr-table"></table>
       </section>
       <section>
-        <h3>Soil inputs</h3>
+        <h3>Soil inputs ${info("These are estimates for this type of ground, based on its rock and rainfall. They are not measured here. You can change the friction below.", "About the soil inputs")}</h3>
         <table id="soilTable" class="cmp gr-table"></table>
-        <small id="soilNote" class="hint"></small>
       </section>
       <section id="simSec">
-        <h3>Rover simulation</h3>
+        <h3>Rover simulation ${info("The rover drives from the start point to the goal across this ground. Choose a gravity to compare Earth with Mars or the Moon, or show both side by side.", "About the rover simulation")}</h3>
         <div id="roverBar" class="rover-bar"></div>
-        <p class="hint" id="simIntro"></p>
         <div class="sim-inputs" id="simInputs"></div>
         <div id="simStatus" class="hint"></div>
         <div id="charts" class="charts"></div>
         <div id="verdict" class="verdict hidden"></div>
-        <p class="fidelity" id="fidelity"></p>
       </section>
+      <footer id="siteCredits" class="site-credits"></footer>
       </div>
     </aside>
   </div>
@@ -126,11 +126,10 @@ export const TEMPLATE = `
 <div id="driveChooser" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dcTitle">
   <div class="modal-card dc-card">
     <button id="dcClose" class="btn ghost close" aria-label="Close">Close</button>
-    <h1 id="dcTitle">Drive a rover</h1>
-    <p class="hint">Choose the gravity to drive at. It opens full screen and you drive freely on this ground: no goal, no score. With both gravities side by side, a small comparison view shows the same inputs at the other gravity.</p>
+    <h1 id="dcTitle">Drive a rover ${info("Drive the rover yourself on this ground. There is no goal and no score. With both gravities, a small window shows the same moves at the other gravity.", "About drive mode")}</h1>
     <div id="dcRover" class="dc-rover"></div>
     <div class="dc-cards" id="dcCards"></div>
-    <p class="hint dc-note">Controller: connect a PlayStation 5 DualSense (or any standard gamepad) by USB-C or Bluetooth, then press a button. Keyboard also works (W A S D, Space to brake).</p>
+    <p class="hint dc-note">Controller or keyboard ${info("Use a PlayStation 5 controller or any standard gamepad (USB-C or Bluetooth), then press a button. On the keyboard, W A S D drives and Space brakes.", "About the controls")}</p>
   </div>
 </div>`;
 
@@ -457,8 +456,9 @@ async function buildPanes() {
 }
 
 // ---------------------------------------------------------------- open / close
-/** Opens Site View on a prepared ground. ctx: { place, target, soil, traits, prov } (index.ts), patch: terrain.js makePatch(), imagery: { img, ctx, spec }. */
+/** Opens Site View on a prepared ground. ctx: { place, target, soil, traits, prov, similarity } (index.ts), patch: terrain.js makePatch(), imagery: { img, ctx, spec }. */
 export async function openSite({ host, ctx, patch, imagery, onBack }) {
+  installInfo();
   V = fresh(); V.host = host; V.ctx = ctx; V.patch = patch; V.imagery = imagery; V.onBack = onBack; V.gmode = 'earth';
   host.insertAdjacentHTML('beforeend', TEMPLATE);
   motion.scale = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.05 : 1;
@@ -474,6 +474,7 @@ export async function openSite({ host, ctx, patch, imagery, onBack }) {
   guard('the ground table', 'cmpTable', fillGround);
   guard('the soil table', 'soilTable', fillSoil);
   guard('the rover simulation panel', 'simInputs', buildSimPanel);
+  guard('the similarity score', null, fillSimilarity);
   $('sunEl').value = 35; $('sunElO').textContent = '35'; $('sunAz').value = 135; $('sunAzO').textContent = '135'; setSun();
   $('follow').checked = V.follow = true; $('link').checked = V.link = true;
   guard('the default rover', null, () => { if (!RS.picked && !RS.recalled && !RS.error) selectRover(defaultForBody(ctx.target.body)); });
@@ -498,6 +499,7 @@ function disposeSides() {
 /** Leaves Site View and frees everything it made: GPU resources, rover models, listeners, the DOM. */
 export async function closeSite() {
   if (V.drive) await V.drive.exit(true);
+  closeInfo();
   V.open = false; cancelAnimationFrame(V.raf); V.playing = false; clearTimeout(buildPending);
   guard('the old terrain', null, disposeSides); V.runs = null; V.routes = null;
   // The wheel-track material is one static object shared by every pane (ground.js, unchanged). Each renderer that drew it hangs a dispose
@@ -516,24 +518,13 @@ export async function closeSite() {
   V = fresh();
 }
 
-/** Provenance text of the ground, from the fields earthground.ts writes (the same fields the old pipeline wrote). */
-export function provenance(p) {
-  const e = p.prov, res = m => (m >= 1 ? `${+m.toFixed(m < 10 ? 1 : 0)} m` : `${Math.round(m * 100)} cm`), im = V.imagery;
-  const el = `Elevation: ${e.elevation_source.replace(/ \(.*\)$/, '')}, ${res(e.spacing_ns_m)} north-south${e.spacing_ew_m ? `, ${res(e.spacing_ew_m)} east-west here` : ''} (real)`;
-  const img = im && im.img ? `Imagery: ${im.spec.label}, ${res(im.img.tilePixelM)} tile pixels${im.spec.sourceRes ? ` (source ${res(im.spec.sourceRes)})` : ' (the image\'s own resolution at this place is not known to the app)'}` : 'Imagery: none (generic ground texture)';
-  const fine = e.synthetic_fine ? ` Detail below about ${res(2 * e.elevation_resolution_m)} is synthetic (rounded interpolation plus fractal detail, rms ${(e.fine_detail_rms_m * 100).toFixed(0)} cm, never more than 0.45 m from the source).` : '';
-  const soil = V.ctx.soil.fromGrid ? ' Soil: chosen by rule from the 0.5° grid cell (rock class, rainfall); Bekker constants assumed.' : ' Soil: assumed (no usable grid cell); Bekker constants assumed.';
-  return { cls: im && im.img && !e.synthetic_fine ? 'real' : 'part', short: `${el}. ${img}.${fine}${soil}`, long: [`Centre ${e.site_center[0].toFixed(5)}, ${e.site_center[1].toFixed(5)}. Fetched ${e.date_built.slice(0, 16).replace('T', ' ')} UTC (${(e.bytes / 1e6).toFixed(1)} MB of elevation tiles).`, `Heights relative to: ${e.datum}.`, ...(e.missing || []).map(m => 'Note: ' + m), 'Rocks are illustrative (rule-based, fixed seed): they are not mapped from the image and not in the height data, and the wheels do not feel them.'].join(' ') };
-}
 function fillLabels() {
   const c = V.ctx;
   $('siteTitle').innerHTML = `<span class="r">${esc(c.place.name)}</span><span class="meta">${c.place.lat.toFixed(4)}, ${c.place.lon.toFixed(4)} &middot; 2 km patch, 10 km context &middot; target ${esc(c.target.name)}</span>`;
   const label = s => `${s.key === 'target' ? `At ${esc(c.target.bodyName)} gravity` : 'At Earth gravity'}<small>g ${s.g} m/s&sup2; &middot; same Earth ground</small>`;
   $('vpLeft').innerHTML = V.sides[0] ? label(V.sides[0]) : '';
   $('vpRight').innerHTML = V.sides[1] ? label(V.sides[1]) : '';
-  const notes = ['real ground, north-up; the sun azimuth is a compass bearing', 'the close-up grain is a generic photo texture and the rocks are illustrative', 'beyond the outline is the real 10 km context ring at 62.5 m'];
-  if (V.sides.length > 1) notes.unshift('both panes are the same Earth ground; only gravity differs');
-  $('synthNote').textContent = notes.join(' · ') + '.';
+  $('viewInfo').innerHTML = info(V.sides.length > 1 ? 'Both views show the same Earth ground, and only gravity differs. North is at the top, and the rocks are for looks only.' : 'North is at the top. The close-up texture and the rocks are for looks only. The area outside the outline is the wider 10 km surroundings.', 'About this view');
 }
 function row(k, v) { return `<tr><td>${esc(k)}</td><td class="n">${esc(v)}</td></tr>`; }
 function fillGround() {
@@ -548,22 +539,30 @@ function fillGround() {
     row('Median slope, 90th pct', `${st.slope_med.toFixed(1)}°, ${st.slope_p90.toFixed(1)}°`),
     row('Relief in the patch', m(st.relief)),
     row('Lowest point', `${e.hmin.toFixed(1)} m (EGM2008)`),
-  ].join('') + (im && im.img ? `<tr><td colspan="2" class="hint">${esc(im.spec.attribution)}. Terms: ${esc(im.spec.terms)}</td></tr>` : '') + `<tr><td colspan="2" class="hint">${esc(e.licence[0])}.</td></tr>`;
+  ].join('');
+  // Attribution and licence (legally required): small and muted, at the bottom of the details panel.
+  $('siteCredits').innerHTML = (im && im.img ? `<p>${esc(im.spec.attribution)}. Terms: ${esc(im.spec.terms)}</p>` : '') + `<p>${esc(e.licence[0])}.</p>`;
 }
 function fillSoil() {
   const s = V.ctx.soil, S = RS.reg.soils[s.cls];
   $('soilTable').innerHTML = s.rows.map(r => row(r.field, r.value)).join('') +
     row('Friction (default)', frictionFromSoil(s.soil).toFixed(2)) + row(`Bekker n, kc, kphi (${S.label})`, `${S.n}, ${S.kc}, ${S.kphi}`);
-  $('soilNote').textContent = 'Friction and rolling resistance follow the old placeholder formulas of soil competence; the Bekker constants are the old assumed, simplified values per ground class (rovers.json). Nothing here is a measurement of this ground. ' + s.rows.filter(r => r.how !== 'from the grid').map(r => `${r.field}: ${r.basis}`).join(' ');
+}
+
+/** The analog card's similarity of this place to the chosen Moon or Mars site, the same number and format (ctx.similarity, from index.ts). Hidden when there is none. */
+function fillSimilarity() {
+  const el = $('simScore'), s = V.ctx.similarity;
+  if (!s || !s.text || !s.target) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="sim-score-text">Similarity to ${esc(s.target)} ${info('How closely this Earth place matches the chosen Moon or Mars site across terrain, rock, climate and other factors. Higher is closer.', 'About the similarity score')}</div><div class="sim-score-num">${esc(s.text)}</div>`;
+  el.classList.remove('hidden');
 }
 
 // ---------------------------------------------------------------- simulation set-up
 function paintSimIntro() {
   const c = V.ctx, par = RS.cfg, gT = c.target.gravity, eq = par.mass_kg * gT / 9.81, test = par.base_badge === 'test';
-  $('simIntro').innerHTML = `The rover build (<b>${esc(par.name)}</b>, ${par.kind.toUpperCase()}) drives a start-to-goal line across this ground${V.sides.length > 1 ? ` twice: at ${esc(c.target.bodyName)} gravity (${gT} m/s&sup2;) and at Earth gravity (9.81 m/s&sup2;)` : ` at ${V.sides[0] && V.sides[0].key === 'target' ? `${esc(c.target.bodyName)} gravity (${gT}` : 'Earth gravity (9.81'} m/s&sup2;)`}.`;
   const lab = $('eqMassLbl'); if (!lab) return;
-  lab.innerHTML = test ? 'Scarecrow already weighs on Earth about what Curiosity weighs on Mars (JPL built it for exactly this reason), so the equal wheel load option is not needed.'
-    : `Use equal-wheel-load test mass at Earth gravity (${eq.toFixed(0)} kg = ${par.mass_kg} kg x ${(gT / 9.81).toFixed(2)}). JPL's Scarecrow test rover is the real-world version of this idea.`;
+  lab.innerHTML = test ? `Equal wheel load: not needed for this rover ${info('This test rover is already built to weigh on Earth what Curiosity weighs on Mars, so it does not need this.', 'About equal wheel load')}`
+    : `Equal wheel load at Earth gravity (${eq.toFixed(0)} kg) ${info("Makes the rover lighter on Earth, so its wheels press on the ground as hard as they would on Mars or the Moon. NASA's Scarecrow test rover works the same way.", 'About equal wheel load')}`;
   $('eqMass').disabled = test; if (test) $('eqMass').checked = false;
 }
 function buildSimPanel() {
@@ -579,9 +578,8 @@ function buildSimPanel() {
   $('simInputs').querySelectorAll('input[type=range]').forEach(i => { const o = i.nextElementSibling; o.textContent = (+i.value).toFixed(2); i.oninput = () => { o.textContent = (+i.value).toFixed(2); if (V.runs) guard('the rover simulation', 'simStatus', () => { V.sides.forEach(s => { s.mu = +i.value; }); computeRuns(); updateAll(true); }); }; });
   $('eqMass').onchange = () => { if (V.runs) guard('the rover simulation', 'simStatus', () => { computeRuns(); updateAll(true); }); };
   paintSimIntro();
-  $('fidelity').textContent = 'Fidelity: a screening model with simplified soil behaviour (a single friction coefficient plus a simplified Bekker sinkage term with assumed soil constants), not a validated rover simulation. The ground is real elevation; the soil inputs are chosen by rule from the 0.5° grid or assumed, and the friction can be adjusted.';
   $('charts').innerHTML = [['tilt', 'Tilt (deg)'], ['slip', 'Slip (%)'], ['e', 'Energy (J/m)'], ['v', 'Speed (m/s)']].map(([k, l]) => `<div><div class="cl">${l}</div><canvas data-k="${k}"></canvas></div>`).join('');
-  $('simStatus').textContent = 'Press Play under the 3D view. The rover drives its planned route; drag the timeline to scrub.';
+  $('simStatus').textContent = '';
   buildHud();
 }
 function straightRoute(p) { const out = [], a = [START[0] * p.size, START[1] * p.size], b = [GOAL[0] * p.size, GOAL[1] * p.size], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(2, Math.round(L / DS)); for (let k = 0; k <= n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); return out; }
@@ -692,7 +690,7 @@ function showVerdict() {
   if (V.sides.length > 1) {
     const v = verdict(run.T, run.Er, run.Eq, run.ctx), cls = v.match >= 80 ? 'good' : v.match >= 60 ? 'mid' : 'bad';
     const tag = r => r.status === 'rover' ? '<span class="tagm gr">build</span>' : r.status === 'match' ? '<span class="tagm ok">match</span>' : r.status === 'mismatch' ? '<span class="tagm no">mismatch</span>' : '<span class="tagm gr">gravity</span>';
-    $('verdict').innerHTML = `<div class="big ${cls}">${Math.round(v.match)}/100 &middot; ${v.label}</div><div class="hint">Match of the two drives on terrain-driven metrics (tilt, slip, energy at equal wheel load, time). Both drives are on the same Earth ground, so this shows only what gravity changes in this model.</div>
+    $('verdict').innerHTML = `<div class="big ${cls}">${Math.round(v.match)}/100 &middot; ${v.label} ${info('How alike the two drives are, from 0 to 100. Both use the same ground, so any difference comes from gravity alone.', 'About the match score')}</div>
     <table><tr><th>Metric</th><th>${esc(V.ctx.target.bodyName)} g</th><th>Earth g</th><th></th></tr>${v.rows.map(r => `<tr><td>${r.label}</td><td>${fv(r.a, r)}${r.unit}</td><td>${fv(r.b, r)}${r.unit}</td><td>${tag(r)}</td></tr>`).join('')}</table>
     ${v.mismatches.length ? `<b>Mismatches</b><ul>${v.mismatches.map(m => `<li>${m.replace('on the target ground', `at ${esc(V.ctx.target.bodyName)} gravity`).replace('on the Earth site', 'at Earth gravity')}</li>`).join('')}</ul>` : '<b>Mismatches</b><ul><li>None on the terrain-driven metrics.</li></ul>'}
     <b>Gravity</b><p class="hint">${v.gravityNote}</p>`;
@@ -702,15 +700,14 @@ function showVerdict() {
     const A = run.A[0], T = A.totals, side = V.sides[0];
     const rows = [['Distance', T.dist, ' m'], ['Drive time', T.time / 60, ' min'], ['Mean tilt', T.tilt_mean, '°'], ['Largest tilt', T.tilt_max, '°'], ['Mean slip', T.slip_mean, '%'], ['Energy per metre', T.e_mean, ' J/m'], ['Energy used on the route (battery ' + Math.round(T.battery_wh) + ' Wh)', T.energy_Wh, ' Wh'], ['Wheel sinkage, mean (simplified)', T.sink_mean_mm, ' mm'], ['Ground pressure under a wheel', T.press_kPa, ' kPa'], ['Friction-limited steepest slope', T.max_climb_deg, '°']];
     const cls = T.reachable ? 'good' : 'bad', label = T.reachable ? 'Reachable' : 'Not reachable';
-    $('verdict').innerHTML = `<div class="big ${cls}">${label}</div><div class="hint">At ${side.key === 'target' ? `${esc(V.ctx.target.bodyName)} gravity, ${side.g}` : 'Earth gravity, 9.81'} m/s&sup2;. Reachable means the route fits the battery, the slope limit and the available drive force (screening result: one battery charge, no recharging, no detours).</div>
+    $('verdict').innerHTML = `<div class="big ${cls}">${label} ${info('Reachable means the rover can finish the route on one battery charge without hitting a slope or grip limit.', 'About reachable')}</div><div class="hint">At ${side.key === 'target' ? `${esc(V.ctx.target.bodyName)} gravity, ${side.g}` : 'Earth gravity, 9.81'} m/s&sup2;.</div>
     <table><tr><th>Metric</th><th>This drive</th></tr>${rows.map(([l, v, u]) => `<tr><td>${l}</td><td>${fv(v, { unit: u })}${u}</td></tr>`).join('')}</table>
-    <b>Blockers</b><ul>${T.blockers.length ? T.blockers.map(b => `<li>${b}</li>`).join('') : '<li>None.</li>'}</ul>
-    <p class="hint">To see what gravity changes, choose "Both, side by side" under Gravity.</p>`;
+    <b>Blockers</b><ul>${T.blockers.length ? T.blockers.map(b => `<li>${b}</li>`).join('') : '<li>None.</li>'}</ul>`;
     $('vpVerdictBody').innerHTML = `<div class="big ${cls}">${label}</div><div><b>${T.blockers.length ? 'Blocked' : 'Route completed'}</b><div class="hint">${T.blockers[0] || `${(T.time / 60).toFixed(0)} min, ${T.energy_Wh.toFixed(0)} Wh of ${Math.round(T.battery_wh)} Wh`}</div></div>`;
     run.verdict = { single: T };
   }
   $('verdict').classList.remove('hidden'); $('vpVerdict').classList.remove('hidden');
-  $('simStatus').textContent = 'Finished. Press Play to run it again, or drag the timeline.';
+  $('simStatus').textContent = '';
   run.verdictShown = true;
 }
 function updateAll(snap) {
