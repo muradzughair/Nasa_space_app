@@ -526,6 +526,54 @@ button.targetbar-row:hover {
   font-weight: 600;
 }
 
+/* The header folds the whole bar away and opens it again, at any time. */
+.targetbar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  text-align: left;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.targetbar-head:hover,
+.targetbar-head:hover .atlas-eyebrow {
+  color: var(--ink);
+}
+
+.targetbar-head .atlas-eyebrow {
+  flex: none;
+  transition: color 0.15s;
+}
+
+.targetbar-head-sum {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+
+.targetbar-head svg {
+  flex: none;
+  margin-left: auto;
+  transition: transform 0.18s;
+}
+
+.targetbar-head[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.targetbar.is-collapsed {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
 .targetbar-disclosure svg {
   transition: transform 0.18s;
 }
@@ -686,13 +734,12 @@ button.targetbar-row:hover {
     padding: 8px 10px;
   }
 
-  .targetbar > .atlas-eyebrow,
   .targetbar-target {
     display: none;
   }
 
   .targetbar-targets {
-    margin: 0 0 6px;
+    margin: 6px 0;
   }
 
   .targetbar-row {

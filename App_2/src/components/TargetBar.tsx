@@ -13,6 +13,23 @@ import { useGrid } from "./InfoCard";
 
 const BODY_NAME: Record<Body, string> = { mars: "Mars", moon: "the Moon" };
 
+/** Whether the bar is folded to its header. Kept between visits; storage may be unavailable. */
+const COLLAPSED_KEY = "atlas.targetbar.collapsed";
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeCollapsed(value: boolean) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, value ? "1" : "0");
+  } catch {
+    /* storage unavailable: the choice lasts for this visit only */
+  }
+}
+
 export const flyToProfile = (globe: GlobeController | null, p: Profile) =>
   travel(globe, p.body, { lat: p.place.lat, lon: p.place.lon, span: 160_000, title: p.place.name, subtitle: `${p.body === "mars" ? "Mars" : "Moon"} · ${p.name}` });
 
@@ -31,6 +48,13 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
   const onEarth = useStore((s) => s.planet) === "earth";
   const heatmapOn = useStore((s) => s.heatmap.on);
   const [newOnly, setNewOnly] = useState(false);
+  // Local to the bar, so changing the body or the version never resets it.
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const toggleCollapsed = () =>
+    setCollapsed((value) => {
+      writeCollapsed(!value);
+      return !value;
+    });
   const listId = useId();
   const customs = useCustomTargets();
   const profile = resolveProfile(atlas.profiles[atlas.body]);
@@ -69,10 +93,21 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
   }
 
   return (
-    <aside className="targetbar panel" aria-label="Analog Atlas">
-      <div className="atlas-eyebrow" id={`${listId}-body`}>
-        Compare Earth with
-      </div>
+    <aside className={`targetbar panel${collapsed ? " is-collapsed" : ""}`} aria-label="Analog Atlas">
+      <button type="button" className="targetbar-head" aria-expanded={!collapsed} aria-controls={`${listId}-panel`} onClick={toggleCollapsed}>
+        <span className="atlas-eyebrow" id={`${listId}-body`}>
+          Compare Earth with
+        </span>
+        {collapsed && (
+          <span className="targetbar-head-sum">
+            {atlas.body === "mars" ? "Mars" : "Moon"} · {profile.name}
+          </span>
+        )}
+        <ChevronIcon />
+      </button>
+
+      {!collapsed && (
+      <div id={`${listId}-panel`} className="targetbar-panel">
       <div className="targetbar-targets" role="radiogroup" aria-labelledby={`${listId}-body`}>
         {(["mars", "moon"] as Body[]).map((body) => (
           <button key={body} type="button" role="radio" aria-checked={body === atlas.body} onClick={() => updateAtlas({ body })}>
@@ -175,6 +210,8 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
             {data.generated}.
           </p>
         </div>
+      )}
+      </div>
       )}
     </aside>
   );
