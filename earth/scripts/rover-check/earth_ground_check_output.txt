@@ -1,0 +1,15 @@
+
+== Harrat Khaybar lava field, Saudi Arabia (25.62, 39.95): Copernicus DEM GLO-30 (Microsoft Planetary Computer); fine grid 513 at 3.91 m; synthetic detail rms 0.07 m; 3.5 MB
+PASS  wheel-contact heights equal the source at 200 random points within 0.5 m  (worst 0.401 m, mean 0.143 m)
+PASS  fine grid equals the app's own reading of the source at 48 truth points within 0.5 m  (worst 0.424 m)
+PASS  context ring meets the patch at the seam  (largest step 0.0000 m)
+   relief 205.2 m, median slope 6.38 deg, lowest point 1600.0 m
+
+== Atacama near Yungay, Chile (-24.0833, -70.0167): Copernicus DEM GLO-30 (Microsoft Planetary Computer); fine grid 513 at 3.91 m; synthetic detail rms 0.03 m; 3.6 MB
+PASS  wheel-contact heights equal the source at 200 random points within 0.5 m  (worst 0.326 m, mean 0.053 m)
+PASS  fine grid equals the app's own reading of the source at 48 truth points within 0.5 m  (worst 0.167 m)
+PASS  context ring meets the patch at the seam  (largest step 0.0000 m)
+   relief 216.0 m, median slope 2.55 deg, lowest point 1013.9 m
+PASS  the two grounds differ  (mean absolute difference at the same grid nodes 602.1 m; relief 205.2 vs 216.0 m)
+
+all passed

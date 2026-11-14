@@ -551,3 +551,21 @@ ol.verify-plain {
     border-radius: 16px 16px 0 0;
   }
 }
+
+.heatmap-keys i.is-video {
+  background: transparent;
+  border: 2px solid #fff;
+}
+.verify-premade {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 209, 102, 0.45);
+  border-radius: 10px;
+}
+.verify-premade p {
+  margin: 0 0 4px;
+}
+.verify-badge.is-planned {
+  border-color: rgba(255, 209, 102, 0.5);
+  color: #ffd166;
+}

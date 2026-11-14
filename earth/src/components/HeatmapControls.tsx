@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { percent } from "../analog/data";
 import type { Grid } from "../analog/grid";
-import { belowCss, cachedCellScores, type CellScores, computeCellScores, distribution, paintHeatmap, rampCss, SCALE_MAX } from "../analog/heatmap";
+import { resolveProfile, useCustomTargets, versionLabel } from "../analog/custom";
+import { paintPremadeMarks, PREMADE_VIDEO_TOP_PERCENT, premadeVideoCells, targetName } from "../analog/premade";
+import { belowCss, cachedCellScores, type CellScores, computeCellScores, distribution, paintHeatmap, profileKey, rampCss, SCALE_MAX } from "../analog/heatmap";
 import type { Profile } from "../analog/scoring";
 import type { GlobeController } from "../globe/GlobeController";
-import { profileById } from "../analog/scoring";
 import { store, updateHeatmap, useStore } from "../state/store";
 import { useGrid } from "./InfoCard";
 
@@ -15,9 +16,10 @@ import { useGrid } from "./InfoCard";
  */
 export function useCellScores(grid: Grid | null, profile: Profile, wanted: boolean): { cells: CellScores | null; progress: number } {
   const [state, setState] = useState<{ cells: CellScores | null; progress: number }>({ cells: null, progress: 0 });
+  const key = profileKey(profile);
   useEffect(() => {
     if (!grid || !wanted) return;
-    const ready = cachedCellScores(grid, profile.id);
+    const ready = cachedCellScores(grid, profile);
     setState({ cells: ready, progress: ready ? 1 : 0 });
     if (ready) return;
     const abort = new AbortController();
@@ -27,8 +29,9 @@ export function useCellScores(grid: Grid | null, profile: Profile, wanted: boole
       if (fraction - shown >= 0.04) setState({ cells: null, progress: (shown = fraction) });
     }).then((cells) => cells && !abort.signal.aborted && setState({ cells, progress: 1 }));
     return () => abort.abort();
-  }, [grid, profile, wanted]);
-  const current = wanted && state.cells?.profileId === profile.id ? state.cells : null;
+    // Keyed on what the profile contains: renaming a custom target does not rescore, a new point always does.
+  }, [grid, key, wanted]);
+  const current = wanted && state.cells?.key === key ? state.cells : null;
   return { cells: current, progress: current ? 1 : state.progress };
 }
 
@@ -40,14 +43,20 @@ export function useCellScores(grid: Grid | null, profile: Profile, wanted: boole
  */
 export function HeatmapLayer({ globe }: { globe: GlobeController | null }) {
   const heatmap = useStore((s) => s.heatmap);
-  const profile = useStore((s) => profileById(s.atlas.profiles[s.atlas.body]));
+  const profileId = useStore((s) => s.atlas.profiles[s.atlas.body]);
+  useCustomTargets();
+  const profile = resolveProfile(profileId);
   const { grid } = useGrid(heatmap.on);
   const { cells } = useCellScores(grid, profile, heatmap.on);
 
   useEffect(() => {
     if (!globe) return;
     // Opacity is read here, not depended on, so moving its slider does not rebuild the picture.
-    globe.setHeatmap(heatmap.on && grid && cells ? paintHeatmap(grid, cells, heatmap.threshold) : null, store.get().heatmap.opacity);
+    try {
+      globe.setHeatmap(heatmap.on && grid && cells ? paintHeatmap(grid, cells, heatmap.threshold) : null, store.get().heatmap.opacity);
+    } catch {
+      /* the heatmap was switched on in the same step as a change of world: this globe is already destroyed, and the next one draws it */
+    }
     return () => {
       try {
         globe.setHeatmap(null);
@@ -56,6 +65,25 @@ export function HeatmapLayer({ globe }: { globe: GlobeController | null }) {
       }
     };
   }, [globe, grid, cells, heatmap.on, heatmap.threshold]);
+
+  // Pre-made rover video places: only from this profile's complete scores, only while the map is on. useCellScores never returns another profile's scores.
+  const marks = useMemo(() => (heatmap.on && grid && cells ? paintPremadeMarks(grid, cells, profile) : null), [heatmap.on, grid, cells, profile]);
+  // A layout effect: the previous target's marks are removed before the browser paints the change of target.
+  useLayoutEffect(() => {
+    if (!globe) return;
+    try {
+      globe.setPremadeMarks(marks?.canvas ?? null);
+    } catch {
+      /* destroyed */
+    }
+    return () => {
+      try {
+        globe.setPremadeMarks(null);
+      } catch {
+        /* the globe of the previous world is already destroyed */
+      }
+    };
+  }, [globe, marks]);
 
   useEffect(() => {
     try {
@@ -76,6 +104,7 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
   const { cells, progress } = useCellScores(grid, profile, heatmap.on);
 
   const stats = useMemo(() => (cells ? distribution(cells, heatmap.threshold) : null), [cells, heatmap.threshold]);
+  const videoPlaces = useMemo(() => (cells ? premadeVideoCells(cells).length : null), [cells]);
   const ticks = [0, 0.15, 0.3, 0.45, 0.6];
 
   return (
@@ -109,7 +138,7 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
 
           <div className="heatmap-legend" aria-label="Heatmap legend">
             <div className="heatmap-legend-title">
-              Similarity score to {profile.body === "moon" ? "the Moon" : "Mars"}, {profile.name.toLowerCase()}
+              Similarity score to {profile.body === "moon" ? "the Moon" : "Mars"}, {versionLabel(profile)}
             </div>
             <div className="heatmap-ramp" style={{ background: rampCss() }} />
             <div className="heatmap-ticks">
@@ -125,6 +154,10 @@ export function HeatmapControls({ profile }: { profile: Profile }) {
               )}
               <li>
                 <i className="is-empty" /> No colour: sea, or land with no grid cell. No score, which is not a low score.
+              </li>
+              <li>
+                <i className="is-video" /> White outline: the top {PREMADE_VIDEO_TOP_PERCENT}% of land cells for {targetName(profile)}, where pre-made rover videos are planned; still to be recorded
+                {videoPlaces != null ? ` (${videoPlaces.toLocaleString("en-US")} cells)` : ""}.
               </li>
             </ul>
           </div>

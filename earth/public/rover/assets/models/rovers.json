@@ -1,0 +1,620 @@
+{
+ "_note": "Rover registry. One row per rover; every figure is {value, unit, source_id, verified}. verified:false means an assumption or an unchecked recollection and is shown as 'assumed' in the app. The app reads this file only through app/js/rovercfg.js (effective rover config). Geometry is measured from the shipped models.",
+ "gravity_mps2": {
+  "moon": 1.62,
+  "mars": 3.71,
+  "earth": 9.81
+ },
+ "sources": {
+  "nasa_p_components": {
+   "label": "NASA Mars 2020 Perseverance, Rover Components (tech specs table)",
+   "url": "https://science.nasa.gov/mission/mars-2020-perseverance/rover-components/",
+   "read": "2026-11-13",
+   "note": "Figures read from the page. The mass row sits in the 'body' table and does not say whether it is the whole rover."
+  },
+  "nasa_msl_factsheet": {
+   "label": "NASA/JPL MSL Fact Sheet (JPL 400-1491, 8/12), web-archive copy",
+   "url": "https://webarchive.library.unt.edu/web/20130215051020/http://mars.jpl.nasa.gov/msl/news/pdfs/MSL_Fact_Sheet.pdf",
+   "read": "2026-11-13",
+   "note": "States length about 3 m, about 110 W from the generator at launch, obstacles up to 65 cm. Does not state mass, wheel size, speed or clearance."
+  },
+  "jpl_pia15682": {
+   "label": "JPL, Test Rover Aids Preparations in California for Curiosity (PIA15682)",
+   "url": "https://www.jpl.nasa.gov/images/pia15682-test-rover-aids-preparations-in-california-for-curiosity-rover-on-mars/",
+   "read": "2026-11-13",
+   "note": "Describes Scarecrow: weighs about the same on Earth as Curiosity on Mars, 20 inch (50 cm) wheels. Gives no mass."
+  },
+  "model_measured": {
+   "label": "Measured from the shipped model (assets/models/model_report.json)",
+   "url": null,
+   "note": "Geometry of the NASA 3D model after the pipeline normalised it. It is the model's size, not a mission specification."
+  },
+  "recalled_public": {
+   "label": "Recalled public NASA description, not checked against a page",
+   "url": null,
+   "note": "From memory of NASA mission descriptions. Not verified from the build sandbox."
+  },
+  "assumed": {
+   "label": "TerraAnalog screening assumption",
+   "url": null,
+   "note": "No source. Chosen to be plausible so the screening model runs. Not a published figure."
+  },
+  "derived_scarecrow": {
+   "label": "Derived: JPL built Scarecrow to weigh on Earth about what Curiosity weighs on Mars (PIA15682)",
+   "url": "https://www.jpl.nasa.gov/images/pia15682-test-rover-aids-preparations-in-california-for-curiosity-rover-on-mars/",
+   "note": "Curiosity mass times g_mars / g_earth. Inherits the uncertainty of the Curiosity mass."
+  },
+  "generic_lunar": {
+   "label": "Generic lunar rover, illustrative",
+   "url": null,
+   "note": "Invented for TerraAnalog from the general size class of small lunar rovers. Not a NASA model or specification."
+  }
+ },
+ "limits": {
+  "mars": {
+   "mass_kg": [
+    300,
+    1500
+   ],
+   "wheel_radius_m": [
+    0.15,
+    0.4
+   ],
+   "wheel_width_m": [
+    0.1,
+    0.6
+   ],
+   "wheel_count": [
+    4,
+    6
+   ],
+   "motor_power_w": [
+    50,
+    400
+   ],
+   "battery_wh": [
+    100,
+    6000
+   ],
+   "top_speed_ms": [
+    0.02,
+    0.15
+   ]
+  },
+  "moon": {
+   "mass_kg": [
+    100,
+    1000
+   ],
+   "wheel_radius_m": [
+    0.12,
+    0.45
+   ],
+   "wheel_width_m": [
+    0.08,
+    0.5
+   ],
+   "wheel_count": [
+    4,
+    6
+   ],
+   "motor_power_w": [
+    50,
+    500
+   ],
+   "battery_wh": [
+    100,
+    3000
+   ],
+   "top_speed_ms": [
+    0.05,
+    0.5
+   ]
+  },
+  "test": {
+   "mass_kg": [
+    150,
+    1000
+   ],
+   "wheel_radius_m": [
+    0.15,
+    0.4
+   ],
+   "wheel_width_m": [
+    0.1,
+    0.6
+   ],
+   "wheel_count": [
+    4,
+    6
+   ],
+   "motor_power_w": [
+    30,
+    400
+   ],
+   "battery_wh": [
+    100,
+    3000
+   ],
+   "top_speed_ms": [
+    0.02,
+    0.15
+   ]
+  }
+ },
+ "soils": {
+  "_note": "Simplified Bekker constants per ground class. ASSUMED and simplified: order-of-magnitude values in the range of published terramechanics tables, not measurements of any site. p = (kc/b + kphi) * z^n with p in kPa, b the wheel width in m, z the sinkage in m; kc in kN/m^(n+1), kphi in kN/m^(n+2).",
+  "fine_regolith": {
+   "label": "Fine regolith",
+   "n": 1.0,
+   "kc": 1.4,
+   "kphi": 820,
+   "source_id": "assumed"
+  },
+  "sand": {
+   "label": "Sand",
+   "n": 1.1,
+   "kc": 1.0,
+   "kphi": 1530,
+   "source_id": "assumed"
+  },
+  "rocky": {
+   "label": "Rocky, firm ground",
+   "n": 0.8,
+   "kc": 30,
+   "kphi": 9000,
+   "source_id": "assumed"
+  }
+ },
+ "defaults_by_body": {
+  "mars": "perseverance",
+  "moon": "lunar_generic"
+ },
+ "rovers": [
+  {
+   "id": "perseverance",
+   "display_name": "Perseverance",
+   "mission": "Mars 2020",
+   "planet": "mars",
+   "badge": "real",
+   "model_file": "assets/models/perseverance.glb",
+   "model_scale": 1,
+   "wheel_node_names": [
+    "wheel_01_L",
+    "wheel_01_R",
+    "wheel_02_L",
+    "wheel_02_R",
+    "wheel_03_L",
+    "wheel_03_R"
+   ],
+   "geometry": {
+    "model_length_m": 3.108,
+    "model_width_m": 2.705,
+    "model_height_m": 1.846,
+    "wheelbase_m": 2.26,
+    "track_m": 2.125,
+    "wheel_radius_model_m": 0.2626,
+    "wheel_width_model_m": 0.3356,
+    "hub_height_m": 0.2627,
+    "hubs": [
+     {
+      "name": "wheel_01_L",
+      "u": 1.1483,
+      "v": 1.0624
+     },
+     {
+      "name": "wheel_01_R",
+      "u": 1.1483,
+      "v": -1.0624
+     },
+     {
+      "name": "wheel_02_L",
+      "u": -0.0367,
+      "v": 1.1845
+     },
+     {
+      "name": "wheel_02_R",
+      "u": -0.0367,
+      "v": -1.1845
+     },
+     {
+      "name": "wheel_03_L",
+      "u": -1.1117,
+      "v": 1.0624
+     },
+     {
+      "name": "wheel_03_R",
+      "u": -1.1117,
+      "v": -1.0624
+     }
+    ],
+    "mid_wheel_x_m": 1.185
+   },
+   "fig": {
+    "mass_kg": {
+     "value": 1025,
+     "unit": "kg",
+     "source_id": "nasa_p_components",
+     "verified": true,
+     "note": "NASA table row 'Weight/mass: 2,260 pounds / 1,025 kilograms'"
+    },
+    "wheel_count": {
+     "value": 6,
+     "unit": "",
+     "source_id": "nasa_p_components",
+     "verified": true,
+     "note": "'six wheels, each with its own motor'"
+    },
+    "wheel_radius_m": {
+     "value": 0.2625,
+     "unit": "m",
+     "source_id": "nasa_p_components",
+     "verified": true,
+     "note": "52.5 cm diameter"
+    },
+    "wheel_width_m": {
+     "value": 0.336,
+     "unit": "m",
+     "source_id": "model_measured",
+     "verified": false,
+     "note": "NASA does not state the width"
+    },
+    "top_speed_ms": {
+     "value": 0.0422,
+     "unit": "m/s",
+     "source_id": "nasa_p_components",
+     "verified": true,
+     "note": "152 m/h on flat, hard ground"
+    },
+    "motor_power_w": {
+     "value": 150,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "mechanical drive power, not published"
+    },
+    "battery_wh": {
+     "value": 3000,
+     "unit": "Wh",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "illustrative drive energy budget sized so a 2 km drive completes on one charge (the real rovers recharge from their generator); NASA names two lithium-ion batteries but gives no capacity"
+    },
+    "base_power_w": {
+     "value": 60,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "avionics, thermal and telecom load while driving"
+    },
+    "ground_clearance_m": {
+     "value": 0.4,
+     "unit": "m",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "NASA gives 40 cm obstacle height, not ground clearance"
+    },
+    "max_slope_deg": {
+     "value": 30,
+     "unit": "deg",
+     "source_id": "nasa_p_components",
+     "verified": true,
+     "note": "drivers avoid terrain that would tilt it more than 30 degrees (it is designed to withstand 45)"
+    },
+    "drive_force_max_N": {
+     "value": 3000,
+     "unit": "N",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "total drive force at zero speed, about 0.8 of the weight on Mars so the rover can hold its slope limit; no published figure"
+    },
+    "drive_efficiency": {
+     "value": 0.45,
+     "unit": "",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "electrical to mechanical"
+    }
+   }
+  },
+  {
+   "id": "curiosity",
+   "display_name": "Curiosity",
+   "mission": "Mars Science Laboratory",
+   "planet": "mars",
+   "badge": "real",
+   "model_file": "assets/models/curiosity.glb",
+   "model_scale": 1,
+   "wheel_node_names": [
+    "wheel_01_L",
+    "wheel_01_R",
+    "wheel_02_L",
+    "wheel_02_R",
+    "wheel_03_L",
+    "wheel_03_R"
+   ],
+   "geometry": {
+    "model_length_m": 3.945,
+    "model_width_m": 2.782,
+    "model_height_m": 2.23,
+    "wheelbase_m": 2.261,
+    "track_m": 2.126,
+    "wheel_radius_model_m": 0.2427,
+    "wheel_width_model_m": 0.3947,
+    "hub_height_m": 0.2517,
+    "hubs": [
+     {
+      "name": "wheel_01_L",
+      "u": 1.1483,
+      "v": 1.063
+     },
+     {
+      "name": "wheel_01_R",
+      "u": 1.148,
+      "v": -1.0628
+     },
+     {
+      "name": "wheel_02_L",
+      "u": -0.0364,
+      "v": 1.1935
+     },
+     {
+      "name": "wheel_02_R",
+      "u": -0.0367,
+      "v": -1.1936
+     },
+     {
+      "name": "wheel_03_L",
+      "u": -1.1102,
+      "v": 1.0628
+     },
+     {
+      "name": "wheel_03_R",
+      "u": -1.1129,
+      "v": -1.0629
+     }
+    ],
+    "mid_wheel_x_m": 1.194
+   },
+   "fig": {
+    "mass_kg": {
+     "value": 899,
+     "unit": "kg",
+     "source_id": "recalled_public",
+     "verified": false,
+     "note": "rover mass as recalled; the fact sheet read does not state it"
+    },
+    "wheel_count": {
+     "value": 6,
+     "unit": "",
+     "source_id": "model_measured",
+     "verified": true,
+     "note": "six wheels on the model"
+    },
+    "wheel_radius_m": {
+     "value": 0.25,
+     "unit": "m",
+     "source_id": "jpl_pia15682",
+     "verified": true,
+     "note": "20 inch (50 cm) wheels, stated for the Scarecrow full-scale test rover that matches Curiosity"
+    },
+    "wheel_width_m": {
+     "value": 0.395,
+     "unit": "m",
+     "source_id": "model_measured",
+     "verified": false,
+     "note": "measured on the model"
+    },
+    "top_speed_ms": {
+     "value": 0.04,
+     "unit": "m/s",
+     "source_id": "recalled_public",
+     "verified": false,
+     "note": "about 4 cm/s recalled; the fact sheet gives 200 m per day instead"
+    },
+    "motor_power_w": {
+     "value": 150,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "mechanical drive power, not published"
+    },
+    "battery_wh": {
+     "value": 3000,
+     "unit": "Wh",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "illustrative drive energy budget sized so a 2 km drive completes on one charge (the real rovers recharge from their generator); the fact sheet states about 110 W from the generator at launch, not a battery size"
+    },
+    "base_power_w": {
+     "value": 60,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "avionics, thermal and telecom load while driving"
+    },
+    "ground_clearance_m": {
+     "value": 0.66,
+     "unit": "m",
+     "source_id": "recalled_public",
+     "verified": false,
+     "note": "about 66 cm recalled"
+    },
+    "max_slope_deg": {
+     "value": 30,
+     "unit": "deg",
+     "source_id": "recalled_public",
+     "verified": false,
+     "note": "operational limit recalled; not on the fact sheet"
+    },
+    "drive_force_max_N": {
+     "value": 2700,
+     "unit": "N",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "total drive force at zero speed, about 0.8 of the weight on Mars so the rover can hold its slope limit; no published figure"
+    },
+    "drive_efficiency": {
+     "value": 0.45,
+     "unit": "",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "electrical to mechanical"
+    }
+   }
+  },
+  {
+   "id": "scarecrow",
+   "display_name": "Scarecrow",
+   "mission": "Curiosity test rover (JPL)",
+   "planet": "test",
+   "badge": "test",
+   "inherit": "curiosity",
+   "note": "Uses the Curiosity model. JPL built Scarecrow to weigh on Earth about what Curiosity weighs on Mars. This is the equal wheel load idea made real.",
+   "fig_override": {
+    "mass_kg": {
+     "derive_from": "curiosity.mass_kg",
+     "scale": "g_mars/g_earth",
+     "unit": "kg",
+     "source_id": "derived_scarecrow"
+    },
+    "drive_force_max_N": {
+     "derive_from": "curiosity.drive_force_max_N",
+     "scale": "g_mars/g_earth",
+     "unit": "N",
+     "source_id": "derived_scarecrow"
+    },
+    "motor_power_w": {
+     "value": 60,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "small test rover motor, assumed"
+    }
+   }
+  },
+  {
+   "id": "lunar_generic",
+   "display_name": "Generic lunar rover",
+   "mission": "Illustrative, not a NASA rover",
+   "planet": "moon",
+   "badge": "generic",
+   "model_file": "assets/models/lunar_generic.glb",
+   "model_scale": 1,
+   "wheel_node_names": [
+    "wheel_01_L",
+    "wheel_01_R",
+    "wheel_03_L",
+    "wheel_03_R"
+   ],
+   "geometry": {
+    "model_length_m": 2.05,
+    "model_width_m": 1.6,
+    "model_height_m": 1.645,
+    "wheelbase_m": 1.5,
+    "track_m": 1.4,
+    "wheel_radius_model_m": 0.275,
+    "wheel_width_model_m": 0.2,
+    "hub_height_m": 0.275,
+    "hubs": [
+     {
+      "name": "wheel_01_L",
+      "u": 0.75,
+      "v": 0.7
+     },
+     {
+      "name": "wheel_01_R",
+      "u": 0.75,
+      "v": -0.7
+     },
+     {
+      "name": "wheel_03_L",
+      "u": -0.75,
+      "v": 0.7
+     },
+     {
+      "name": "wheel_03_R",
+      "u": -0.75,
+      "v": -0.7
+     }
+    ]
+   },
+   "fig": {
+    "mass_kg": {
+     "value": 430,
+     "unit": "kg",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "wheel_count": {
+     "value": 4,
+     "unit": "",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "wheel_radius_m": {
+     "value": 0.25,
+     "unit": "m",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "wheel_width_m": {
+     "value": 0.2,
+     "unit": "m",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "top_speed_ms": {
+     "value": 0.2,
+     "unit": "m/s",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "motor_power_w": {
+     "value": 200,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false
+    },
+    "battery_wh": {
+     "value": 300,
+     "unit": "Wh",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "illustrative drive energy budget"
+    },
+    "base_power_w": {
+     "value": 80,
+     "unit": "W",
+     "source_id": "assumed",
+     "verified": false
+    },
+    "ground_clearance_m": {
+     "value": 0.45,
+     "unit": "m",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "max_slope_deg": {
+     "value": 25,
+     "unit": "deg",
+     "source_id": "generic_lunar",
+     "verified": false
+    },
+    "drive_force_max_N": {
+     "value": 700,
+     "unit": "N",
+     "source_id": "assumed",
+     "verified": false,
+     "note": "about the rover weight on the Moon"
+    },
+    "drive_efficiency": {
+     "value": 0.45,
+     "unit": "",
+     "source_id": "assumed",
+     "verified": false
+    }
+   }
+  }
+ ]
+}

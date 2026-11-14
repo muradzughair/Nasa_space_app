@@ -1,0 +1,45 @@
+== Heatmap off
+PASS  card of the best maria cell: no "Rover video" section, "Simulate a rover here" present  ({"video":false,"text":"","rank":"","sim":true})
+PASS  no marks layer on the globe
+PASS  nothing about pre-made videos anywhere on the page
+
+== Heatmap on, fixed version (Moon, maria)
+PASS  no marks while the heatmap is scoring  (21 frames scoring, 0 of them with marks)
+PASS  marked cells = cells whose shown rank is top 1.0% or better  (967 drawn, 967 by the card's rank text)
+PASS  legend line about the planned pre-made videos  (White outline: the top 1% of land cells for the Moon, maria, where pre-made rover videos are planned; still to be recorded (967 cells).)
+PASS  marked cell card: "Rover video", "To be recorded", reason with the target name, not made yet  (ROVER VIDEO | To be recorded |  | This cell ranks in the top 1% of land cells for the Moon, maria (top 0.1%). |  | The pre-made video of a rover driving around this area has not been made yet.)
+PASS  the same card shows a rank within the top 1%  (Regional cell similarity | 76% | Rank among land cells | top 0.1% | scores higher than 99.9% of cells | This point | 76%)
+
+== Verification request at the marked place
+PASS  request form shows the planned pre-made video  (To be recorded Pre-made rover video: planned, not recorded.  Target the Moon, maria (moon-maria). The 0.5° cell centred 25.25° N, 37.75° E ranks top 0.1% of land cells (percentile rank 100.00); rule: the top 1% of land cells, by the rank shown on the card. Planned, not recorded: no pre-made rover video exists for this place yet. This is a status, not a video.)
+PASS  stored entry: status, target id and name, custom flag, rank, rule  ({"recordType":"planned pre-made rover video","status":"to-be-recorded","targetId":"moon-maria","targetName":"the Moon, maria","custom":false,"cellCentre":{"lat":25.25,"lon":37.75},"cellDegrees":0.5,"percentileRank":0.9999891507182225,"shownRank":"top 0.1%","rule":"the top 1% of land cells, by the rank shown on the card","note":"Planned, not recorded: no pre-made rover video exists for this place yet. This is a status, not a video."})
+PASS  the request video is untouched ("To be recorded" is not a video)  ({"kind":"none","description":""})
+PASS  Markdown report and JSON export carry it  (- No video attached. / - Pre-made rover video: planned, to be recorded (not a video; nothing to play). Target the Moon, maria (moon-maria); the 0.5° cell centred 25.25000, 37.75000 ranks top 0.1% of land cells (percentile rank 100.00); rule: the top 1% of land cells, by the rank shown on the card. Planned, not recorded: no pre-made rover video exists for this place yet. This is a status, not a video.)
+
+== Unmarked cell (Amazon)
+PASS  unmarked cell card: no "Rover video" section, simulator offered  (Regional cell similarity | 12% | Rank among land cells | top 34% | scores higher than 66.1% of cells | This point | 12%)
+PASS  request form has no planned pre-made video
+PASS  stored request for the unmarked place has no planned-video entry, and its report none
+PASS  no request counts a planned pre-made video as a video  (0 of 2 requests have a video)
+
+== Simulator at an unmarked and at a marked place
+PASS  simulator opens at the unmarked (Amazon) place  (1 pane, Copernicus DEM GLO-30 (Microsoft Planetary Computer), soil fine_regolith)
+PASS  simulator opens at the marked (best maria cell) place  (1 pane, Copernicus DEM GLO-30 (Microsoft Planetary Computer), soil rocky)
+
+== Change of version: marks follow at once, the previous ones are never shown
+PASS  the maria marks are gone from the first frame after the change  (106 frames sampled after the change event, 0 with the old marks)
+PASS  highlands: marked cells = cells whose shown rank is top 1.0% or better  (967 drawn, 967 by rank text)
+
+== Two flagged lunar points
+PASS  custom target "Mare Tranquillitatis 8.34° N, 33.22° E": marked cells = cells whose shown rank is top 1.0% or better  (967 drawn, 967 by rank text)
+PASS  its best cell's card names the custom target in the reason  (This cell ranks in the top 1% of land cells for the custom target "Mare Tranquillitatis 8.34° N, 33.22° E" (top 0.1%).)
+PASS  custom target "Lunar point 8.97° S, 15.50° E": marked cells = cells whose shown rank is top 1.0% or better  (967 drawn, 967 by rank text)
+PASS  its best cell's card names the custom target in the reason  (This cell ranks in the top 1% of land cells for the custom target "Lunar point 8.97° S, 15.50° E" (top 0.1%).)
+PASS  the two flagged points mark different places  (967 and 967 cells marked, 686 in common)
+PASS  request for a custom target stores custom = true and the target's own name  ({"recordType":"planned pre-made rover video","status":"to-be-recorded","targetId":"moon-custom-9fh3k2","targetName":"the custom target \"Lunar point 8.97° S, 15.50° E\"","custom":true,"cellCentre":{"lat":25.25,"lon":37.75},"cellDegrees":0.5,"percentileRank":0.9999891507182225,"shownRank":"top 0.1%","rule":"the top 1% of land cells, by the rank shown on the card","note":"Planned, not recorded: no pre-made rover video exists for this place yet. This is a status, not a video."})
+
+== Heatmap off again
+PASS  switching the heatmap off removes the marks and the "Rover video" section
+PASS  zero console and page errors
+
+all passed

@@ -55,6 +55,26 @@ export interface ModelSnapshot {
   note: string;
   gridGenerated: string | null;
   sources: SourceNote[];
+  /**
+   * Set when the comparison target was not one of the fixed profiles but a
+   * point flagged on the Moon: where it is, which fixed profile it inherits
+   * from, and how each of its fields was obtained. Absent or null otherwise.
+   */
+  customTarget?: CustomTargetNote | null;
+}
+
+export interface CustomTargetNote {
+  custom: true;
+  name: string;
+  lat: number;
+  lon: number;
+  createdAt: string;
+  baseProfileId: string;
+  baseProfileName: string;
+  terrain: { slope: number; roughness: number; relief: number };
+  lowSun: boolean;
+  /** One row per field of the target: measured, map, computed or inherited, with its source. */
+  provenance: { field: string; value: string; how: "measured" | "map" | "computed" | "inherited"; source: string }[];
 }
 
 export interface Question {
@@ -104,6 +124,27 @@ export interface SiteRef {
   country?: string;
 }
 
+/**
+ * A pre-made rover video planned for this place: the cell ranks within the
+ * top 1% of land cells for the target (analog/premade.ts). A status, not a
+ * video: it is kept apart from `video`, is never played and is never
+ * counted as a video. Absent when the place is not one of those cells.
+ */
+export interface PremadeVideoNote {
+  recordType: "planned pre-made rover video";
+  status: "to-be-recorded";
+  targetId: string;
+  targetName: string;
+  custom: boolean;
+  cellCentre: { lat: number; lon: number };
+  cellDegrees: number;
+  /** Share of land cells scoring lower, 0 to 1, and the rank as the card showed it. */
+  percentileRank: number;
+  shownRank: string;
+  rule: string;
+  note: string;
+}
+
 export interface VerificationRequest {
   id: string;
   createdAt: string;
@@ -118,6 +159,8 @@ export interface VerificationRequest {
   questions: Question[];
   observationRequests: ObservationRequest[];
   rover: { status: "not-integrated"; note: string };
+  /** Only for a place where a pre-made rover video is planned; see PremadeVideoNote. */
+  premadeVideo?: PremadeVideoNote;
 }
 
 export type Verdict = "matches" | "differs" | "cannot-judge";
@@ -180,7 +223,9 @@ export interface Review {
 }
 
 export const ROVER_NOTE =
-  "No rover simulator is connected to this build. A rover walkthrough made elsewhere can be attached as a video; the built-in camera pass is a terrain preview only.";
+  "The in-app rover simulator (\"Simulate a rover here\" on a card) is a screening model and is not linked to requests: no simulation result is stored here. A rover video made elsewhere can be attached as a video; the built-in camera pass is a terrain preview only.";
+
+export const PREMADE_NOTE = "Planned, not recorded: no pre-made rover video exists for this place yet. This is a status, not a video.";
 
 export const LOCAL_NOTE =
   "Local prototype: requests, responses, reviews and attachments are stored in this browser only (IndexedDB). Nothing is sent to other people or to NASA. Use Export and Import to pass records by hand.";

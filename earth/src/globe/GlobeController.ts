@@ -143,6 +143,8 @@ export class GlobeController {
   private labelLayer: ImageryLayer | null = null;
   private overlayLayer: ImageryLayer | null = null;
   private heatmapLayer: ImageryLayer | null = null;
+  /** Outlines of the cells where pre-made rover videos are planned, drawn over the heatmap. */
+  private marksLayer: ImageryLayer | null = null;
   private clickHandler: ((lat: number, lon: number) => void) | null = null;
   private verifyEntities: Entity[] = [];
   private walkthrough: Walkthrough | null = null;
@@ -514,7 +516,38 @@ export class GlobeController {
     }
     if (previous) imageryLayers.remove(previous, true);
     this.heatmapLayer = next;
+    // the pre-made video outlines stay above the heatmap when it is redrawn
+    const marks = this.marksLayer;
+    if (next && marks) while (imageryLayers.indexOf(marks) < imageryLayers.indexOf(next)) imageryLayers.raise(marks);
     this.viewer.scene.requestRender();
+  }
+
+  /**
+   * Outlines of the heatmap cells where a pre-made rover video is planned
+   * (analog/premade.ts): a picture at four pixels per cell, transparent
+   * except for the outlines, above the heatmap. Null removes it.
+   */
+  setPremadeMarks(image: HTMLCanvasElement | null): void {
+    const { imageryLayers } = this.viewer;
+    const previous = this.marksLayer;
+    let next: ImageryLayer | null = null;
+    if (image && this.planet.earthServices) {
+      next = new ImageryLayer(new CanvasImageryProvider(image), {
+        magnificationFilter: TextureMagnificationFilter.NEAREST,
+        minificationFilter: TextureMinificationFilter.NEAREST,
+      });
+      imageryLayers.add(next, this.labelLayer ? imageryLayers.indexOf(this.labelLayer) : imageryLayers.length);
+    }
+    if (previous) imageryLayers.remove(previous, true);
+    this.marksLayer = next;
+    this.viewer.scene.requestRender();
+  }
+
+  /** Stops drawing the globe while the rover simulator covers it (and starts again); the view and selection are kept. */
+  setPaused(paused: boolean): void {
+    if (this.destroyed) return;
+    this.viewer.useDefaultRenderLoop = !paused;
+    if (!paused) this.viewer.scene.requestRender();
   }
 
   setHeatmapOpacity(alpha: number): void {
@@ -596,7 +629,7 @@ export class GlobeController {
     this.walkthrough?.stop();
     this.onUserInput();
     // The preview shows the place as imaged. Model colours (the heatmap) and science overlays stay out of it.
-    const hidden = [this.heatmapLayer, this.overlayLayer].filter((layer): layer is ImageryLayer => !!layer && layer.show);
+    const hidden = [this.heatmapLayer, this.marksLayer, this.overlayLayer].filter((layer): layer is ImageryLayer => !!layer && layer.show);
     for (const layer of hidden) layer.show = false;
     const run = runWalkthrough(this.viewer, route, options);
     this.walkthrough = run;

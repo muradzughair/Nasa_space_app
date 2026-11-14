@@ -1,10 +1,12 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { percent, useAtlas } from "../analog/data";
 import { siteMeasures } from "../analog/grid";
-import { type Body, type Profile, profileById, PROFILES, profilesOf, similarity } from "../analog/scoring";
+import { customTarget, isFixed, profilesFor, resolveProfile, useCustomTargets, versionLabel } from "../analog/custom";
+import { type Body, type Profile, similarity } from "../analog/scoring";
 import type { GlobeController } from "../globe/GlobeController";
 import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
+import { removeTarget, TargetDetails } from "./CustomTarget";
 import { HeatmapControls } from "./HeatmapControls";
 import { ChevronIcon } from "./icons";
 import { useGrid } from "./InfoCard";
@@ -30,17 +32,20 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
   const heatmapOn = useStore((s) => s.heatmap.on);
   const [newOnly, setNewOnly] = useState(false);
   const listId = useId();
-  const profile = profileById(atlas.profiles[atlas.body]);
+  const customs = useCustomTargets();
+  const profile = resolveProfile(atlas.profiles[atlas.body]);
+  const custom = customTarget(profile.id);
+  const versions = profilesFor(atlas.body);
 
-  // Dots on the globe: curated sites on Earth, the profiles' reference regions on the Moon and Mars.
+  // Dots on the globe: curated sites on Earth; on the Moon and Mars the profiles' reference regions and the custom targets.
   useEffect(() => {
     if (!globe || !data) return;
     const pins =
       globe.planet.id === "earth"
         ? data.sites.map((s) => ({ lat: s.lat, lon: s.lon, active: s.id === atlas.siteId }))
-        : PROFILES.filter((p) => p.body === globe.planet.id).map((p) => ({ lat: p.place.lat, lon: p.place.lon, active: p.id === profile.id }));
+        : profilesFor(globe.planet.id as Body).map((p) => ({ lat: p.place.lat, lon: p.place.lon, active: p.id === profile.id }));
     globe.setPins(pins);
-  }, [globe, data, atlas.siteId, profile.id]);
+  }, [globe, data, atlas.siteId, profile.id, customs]);
 
   // The grid is needed to rank the reference sites.
   const { grid, failed: gridFailed } = useGrid(atlas.listOpen);
@@ -50,7 +55,8 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
       data && grid && atlas.listOpen
         ? data.sites.map((site) => ({ site, score: similarity(siteMeasures(grid, site).measures, profile) })).sort((a, b) => b.score - a.score)
         : [],
-    [data, grid, atlas.listOpen, profile],
+    // A renamed custom target is a new object with the same content: its id is what matters here.
+    [data, grid, atlas.listOpen, profile.id],
   );
 
   if (!atlas.open) return null;
@@ -78,11 +84,22 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
       <label className="targetbar-row">
         <span>Version</span>
         <select value={profile.id} onChange={(e) => updateAtlas({ profiles: { ...atlas.profiles, [atlas.body]: e.target.value } })}>
-          {profilesOf(atlas.body).map((p) => (
+          {versions.filter(isFixed).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
+          {versions.some((p) => !isFixed(p)) && (
+            <optgroup label="Custom points (flagged on the Moon)">
+              {versions
+                .filter((p) => !isFixed(p))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </optgroup>
+          )}
         </select>
       </label>
 
@@ -94,6 +111,17 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
           Fly to {profile.place.name}
         </button>
       </div>
+
+      {custom ? (
+        <>
+          <TargetDetails target={custom} />
+          <button type="button" className="targetbar-link target-remove" onClick={() => removeTarget(custom)}>
+            Remove this custom target
+          </button>
+        </>
+      ) : (
+        atlas.body === "moon" && <p className="target-hint">To compare with a specific lunar location, select a point on the Moon and choose "Use this point as the target".</p>
+      )}
 
       <HeatmapControls profile={profile} />
 
@@ -143,7 +171,7 @@ export function TargetBar({ globe }: { globe: GlobeController | null }) {
             )}
           </ol>
           <p className="atlas-foot">
-            Similarity to {BODY_NAME[profile.body]} ({profile.name.toLowerCase()}): a weighted geometric mean of the metric groups, so one poor match pulls the whole score down. Data built{" "}
+            Similarity to {BODY_NAME[profile.body]} ({versionLabel(profile)}): a weighted geometric mean of the metric groups, so one poor match pulls the whole score down. Data built{" "}
             {data.generated}.
           </p>
         </div>

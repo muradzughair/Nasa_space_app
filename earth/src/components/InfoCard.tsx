@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { type AtlasData, percent, type Site, type Source, useAtlas } from "../analog/data";
+import { customTarget, evaluateTarget, profilesFor, resolveProfile, useCustomTargets } from "../analog/custom";
 import { cellAt, type Features, type Grid, loadGrid, nearbySite } from "../analog/grid";
 import { cellSummary } from "../analog/heatmap";
-import { type Body, type EarthMeasures, evaluate, type Profile, profileById, profilesOf, similarity } from "../analog/scoring";
+import { premadeVideoPlan } from "../analog/premade";
+import { type Body, type EarthMeasures, type Profile, similarity } from "../analog/scoring";
 import { formatDistance, formatLat, formatLon, formatPopulation } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
 import { type AtlasState, type Selection, type SelectionKind, updateAtlas, useStore } from "../state/store";
 import { AnalogCard } from "./AnalogCard";
 import { Comparison, SourceList } from "./Comparison";
+import { MoonTargetAction, TargetDetails } from "./CustomTarget";
 import { useCellScores } from "./HeatmapControls";
 import { CloseIcon } from "./icons";
 import { flyToProfile } from "./TargetBar";
+import { RoverVideoSection, SimulateRover } from "./SimulateRover";
 import { HeatmapCellNote, RequestVerification } from "./verify/RequestAction";
 
 const KIND_LABEL: Record<SelectionKind, string> = {
@@ -110,6 +114,17 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
           <CellComparison key={selection.id} globe={globe} data={data} grid={grid} selection={selection} atlas={atlas} />
         ))}
 
+      {onEarth && (
+        <SimulateRover
+          globe={globe}
+          place={{ name: selection.title, lat: selection.lat, lon: selection.lon, kind: "grid-point" }}
+          profile={resolveProfile(atlas.profiles[atlas.body])}
+          water={selection.water}
+        />
+      )}
+
+      {planet === "moon" && <MoonTargetAction key={selection.id} selection={selection} />}
+
       <button type="button" className="card-action" onClick={() => globe?.zoomToSelection()}>
         Zoom closer
       </button>
@@ -126,12 +141,13 @@ const bodyName = (body: Body) => (body === "moon" ? "the Moon" : "Mars");
  * version of it.
  */
 export function BodyScores({ measures, atlas }: { measures: EarthMeasures; atlas: AtlasState }) {
-  const rows = useMemo(() => profilesOf(atlas.body).map((profile) => ({ profile, score: similarity(measures, profile) })), [measures, atlas.body]);
+  const customs = useCustomTargets();
+  const rows = useMemo(() => profilesFor(atlas.body).map((profile) => ({ profile, score: similarity(measures, profile) })), [measures, atlas.body, customs]);
   return (
     <section className="atlas-section cell-targets">
       <div className="body-scores" role="radiogroup" aria-label="Similarity to Mars and to the Moon">
         {BODIES.map((body) => {
-          const profile = profileById(atlas.profiles[body]);
+          const profile = resolveProfile(atlas.profiles[body]);
           return (
             <button key={body} type="button" role="radio" aria-checked={body === atlas.body} onClick={() => updateAtlas({ body })}>
               <span className="body-score">{percent(similarity(measures, profile))}</span>
@@ -183,12 +199,16 @@ interface CellProps {
 /** The clicked place against Mars and the Moon, with the chosen version opened. */
 function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
   const cell = useMemo(() => cellAt(grid, selection.lat, selection.lon), [grid, selection.lat, selection.lon]);
-  const profile = profileById(atlas.profiles[atlas.body]);
-  const evaluation = useMemo(() => (cell ? evaluate(cell.measures, profile) : null), [cell, profile]);
+  useCustomTargets();
+  const profile = resolveProfile(atlas.profiles[atlas.body]);
+  const custom = customTarget(profile.id);
+  const evaluation = useMemo(() => (cell ? evaluateTarget(cell.measures, profile) : null), [cell, profile]);
   const near = useMemo(() => nearbySite(data, selection.lat, selection.lon), [data, selection.lat, selection.lon]);
   const heatmapOn = useStore((s) => s.heatmap.on);
   const { cells } = useCellScores(grid, profile, heatmapOn);
   const summary = useMemo(() => cellSummary(grid, profile, cells, selection.lat, selection.lon), [grid, profile, cells, selection.lat, selection.lon]);
+  // A place for a pre-made rover video: only from the heatmap's complete scores for this profile.
+  const plan = heatmapOn ? premadeVideoPlan(summary, profile) : null;
 
   // Outline the grid cell on the globe, so it is plain that the numbers are for a region, not a point.
   useEffect(() => {
@@ -222,13 +242,16 @@ function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
       <BodyScores measures={cell.measures} atlas={atlas} />
 
       {heatmapOn && summary && <HeatmapCellNote summary={summary} profile={profile} here={{ label: "This point", score: evaluation.overall }} kind="point" />}
+      {plan && <RoverVideoSection plan={plan} />}
       <RequestVerification
         input={{
           site: { name: selection.title, lat: selection.lat, lon: selection.lon, kind: "grid-point", country: selection.subtitle || undefined },
           profile,
           evaluation,
           basis: "grid-point",
+          customTarget: custom,
           heatmapCell: summary,
+          premadeVideo: plan,
           datasets: cell.sources.filter((id) => header.sources[id]).map((id) => ({ id, source: header.sources[id] })),
           sources: sourcesOf(data, profile),
           gridGenerated: header.generated,
@@ -236,6 +259,8 @@ function CellComparison({ globe, data, grid, selection, atlas }: CellProps) {
           modelledTemperature: cell.modelledTemperature,
         }}
       />
+
+      {custom && <TargetDetails target={custom} />}
 
       <Comparison data={data} profile={profile} evaluation={evaluation} label="This spot" pressure={cell.measures.pressure} />
 

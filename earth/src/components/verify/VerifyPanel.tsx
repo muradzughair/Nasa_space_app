@@ -7,7 +7,7 @@ import { buildBundle, clock, download, importBundle, reportMarkdown, roverHandof
 import { routeLength } from "../../verify/route";
 import { type ContributorResponse, type Evidence, LOCAL_NOTE, REVIEW_LABEL, type Review, type ReviewStatus, type VerificationRequest } from "../../verify/types";
 import { BackIcon, CloseIcon } from "../icons";
-import { exact, flyToSite, ModelSummary, useOverlay, VideoPlayer } from "./parts";
+import { exact, flyToSite, ModelSummary, PremadeVideoSummary, useOverlay, VideoPlayer } from "./parts";
 import { RequestForm } from "./RequestForm";
 import { RespondForm } from "./RespondForm";
 
@@ -74,7 +74,7 @@ export function VerifyPanel({ globe }: { globe: GlobeController | null }) {
                   <button type="button" onClick={() => updateVerify({ view: "request", requestId: r.id })}>
                     <span className="atlas-site-name">{r.site.name}</span>
                     <span className="atlas-site-detail">
-                      {r.model.body === "moon" ? "Moon" : "Mars"}, {r.model.profileName.toLowerCase()} · model score {percent(r.model.overall)} · {mine.length} {mine.length === 1 ? "response" : "responses"}
+                      {r.model.body === "moon" ? "Moon" : "Mars"}, {r.model.customTarget ? `custom point ${r.model.profileName}` : r.model.profileName.toLowerCase()} · model score {percent(r.model.overall)} · {mine.length} {mine.length === 1 ? "response" : "responses"}
                       {open > 0 && `, ${open} unreviewed`}
                     </span>
                   </button>
@@ -92,8 +92,8 @@ export function VerifyPanel({ globe }: { globe: GlobeController | null }) {
             <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={(e) => (onImport(e.target.files?.[0]), (e.target.value = ""))} />
           </div>
           <p className="verify-hint">
-            Sharing is by hand in this prototype: export a request, send the file, and the other person imports it, responds, and exports it back. The first version works with the eight existing
-            target profiles; picking an arbitrary point on the Moon or Mars as a target is not supported.
+            Sharing is by hand in this prototype: export a request, send the file, and the other person imports it, responds, and exports it back. A request can be made against the eight fixed
+            target profiles or a custom point flagged on the Moon; the request then records the point and where each of its fields comes from. Custom points on Mars are not supported.
           </p>
         </>
       )}
@@ -136,8 +136,9 @@ function RequestView({ globe, request, responses, reviews }: ViewProps) {
         <h3>Walkthrough video</h3>
         <VideoPlayer video={request.video} />
         <p className="verify-rover">
-          <strong>Rover simulation: not connected.</strong> {request.rover.note}
+          <strong>Rover simulation: not linked to this request.</strong> {request.rover.note}
         </p>
+        {request.premadeVideo && <PremadeVideoSummary plan={request.premadeVideo} />}
         {request.route.length > 1 && (
           <p className="verify-fact">
             Route: {request.route.length} waypoints, {Math.round(routeLength(request.route)).toLocaleString("en-US")} m.

@@ -1,4 +1,5 @@
 import { percent } from "../../analog/data";
+import { versionLabel } from "../../analog/custom";
 import { type CellSummary, topShare } from "../../analog/heatmap";
 import type { Profile } from "../../analog/scoring";
 import { formatLat, formatLon } from "../../geo/coords";
@@ -49,7 +50,7 @@ export function HeatmapCellNote({ summary, profile, here, kind }: NoteProps) {
           : differs
             ? "This point scores differently because impact structures and volcanoes are measured from the point itself rather than from the cell centre."
             : "Climate, rock class and terrain are the same for every point in the cell; only the distance to craters and volcanoes is measured from the point."}{" "}
-        The rank says how the cell compares with other land cells for {profile.name.toLowerCase()}; it is not a similarity to {profile.body === "moon" ? "the Moon" : "Mars"}.
+        The rank says how the cell compares with other land cells for {versionLabel(profile)}; it is not a similarity to {profile.body === "moon" ? "the Moon" : "Mars"}.
       </p>
     </section>
   );

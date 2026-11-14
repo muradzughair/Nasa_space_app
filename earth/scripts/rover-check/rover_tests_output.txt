@@ -1,0 +1,49 @@
+PASS  registry has four rovers  (perseverance,curiosity,scarecrow,lunar_generic)
+PASS  perseverance: every figure has value, unit, source_id, verified
+PASS  perseverance: model file exists and is under 6 MB
+PASS  perseverance: wheel nodes named in the registry
+PASS  curiosity: every figure has value, unit, source_id, verified
+PASS  curiosity: model file exists and is under 6 MB
+PASS  curiosity: wheel nodes named in the registry
+PASS  scarecrow: every figure has value, unit, source_id, verified
+PASS  scarecrow: model file exists and is under 6 MB
+PASS  scarecrow: wheel nodes named in the registry
+PASS  lunar_generic: every figure has value, unit, source_id, verified
+PASS  lunar_generic: model file exists and is under 6 MB
+PASS  lunar_generic: wheel nodes named in the registry
+PASS  no unverified figure is marked verified without a source
+PASS  Scarecrow weight on Earth equals Curiosity weight on Mars within 2 percent  (3335 N vs 3335 N, 0.00 %)
+PASS  Scarecrow wheel load on Earth equals Curiosity wheel load on Mars
+PASS  Scarecrow is badged TEST, Curiosity REAL
+PASS  Scarecrow mass is flagged derived and unverified
+PASS  preset is REAL
+PASS  changing mass flips to CUSTOM
+PASS  setting the preset value again stays REAL
+PASS  overrides are clamped to realistic limits
+PASS  wheel count 6 -> 4 drops the middle pair
+PASS  wheel count 4 -> 6 adds a middle pair on the 4-wheel model
+PASS  a user-set figure is tagged assumed with a "no source" tooltip
+PASS  save and load round-trips
+PASS  heavier build sinks more (same soil, same gravity)  (13.68 -> 16.88 mm)
+PASS  narrower wheels sink more  (19.36 mm)
+PASS  wider wheels sink less
+PASS  larger wheels sink less
+PASS  softer soil sinks more (fine regolith > rocky, sand > rocky)
+PASS  lower gravity sinks less (Moon < Mars < Earth for the same rover)  (7.85 < 13.68 < 26.38 mm)
+PASS  contact pressure matches load / (width x contact length)
+PASS  ground class from traits
+PASS  lower gravity gives less normal load  (1661 N vs 10055 N)
+PASS  drive: the narrow heavy build sinks deeper and is slower on the same soil  (sink 8.3 vs 21.1 mm, speed 0.168 vs 0.142 m/s)
+PASS  bigger battery drives further before it is empty  (600 m vs 1400 m)
+PASS  estimated range grows with battery  (600 m vs 1400 m)
+PASS  estimate and drive agree on range within 20 percent  (estimate 1400 m, drive 1400 m)
+PASS  estimate: weight, pressure and sinkage rise with gravity; top speed falls  (top speed 0.168 -> 0.000 m/s)
+PASS  lunar rover on the Moon: 6 degree route reachable with the preset battery  (121 Wh of 300)
+PASS  a small battery makes the same route unreachable  (battery too small (121 Wh needed, 100 Wh available))
+PASS  a big battery restores it
+PASS  on Earth the weak fast build cannot climb the route  (cannot climb or push through on 100 % of the route; battery too small (533 Wh needed, 300 Wh available))
+PASS  route: narrow wheels sink more and use more energy per metre  (15.10 vs 5.19 mm; 426.8 vs 398.1 J/m)
+PASS  route: Perseverance preset on Earth with raw mass has more weight and more energy than on Mars
+PASS  deterministic with the soil term
+
+all passed

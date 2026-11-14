@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { activeCustomId, isCustomId, setActiveCustom } from "../analog/custom";
 import type { Body } from "../analog/scoring";
 import type { PlanetId } from "../globe/planets";
 
@@ -129,12 +130,15 @@ function createStore(initial: AppState) {
   };
 }
 
+/** A custom lunar target that was the chosen version when the page was last open is chosen again. */
+const restored = activeCustomId();
+
 export const store = createStore({
   ready: false,
   planet: "earth",
   arrival: null,
   overlay: null,
-  atlas: { open: true, body: "mars", profiles: { mars: "mars-modern", moon: "moon-maria" }, siteId: null, listOpen: false },
+  atlas: { open: true, body: restored ? "moon" : "mars", profiles: { mars: "mars-modern", moon: restored ?? "moon-maria" }, siteId: null, listOpen: false },
   heatmap: { on: false, opacity: 0.8, threshold: 0 },
   verify: { open: false, view: "list", requestId: null },
   settings: loadSettings({
@@ -178,7 +182,9 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 }
 
 export function updateAtlas(patch: Partial<AtlasState>) {
-  store.set({ atlas: { ...store.get().atlas, ...patch } });
+  const atlas = { ...store.get().atlas, ...patch };
+  store.set({ atlas });
+  setActiveCustom(atlas.body === "moon" && isCustomId(atlas.profiles.moon) ? atlas.profiles.moon : null);
 }
 
 /** Which setting holds the imagery choice for a world. */

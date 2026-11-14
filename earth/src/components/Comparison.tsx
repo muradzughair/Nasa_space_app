@@ -1,3 +1,4 @@
+import { versionLabel } from "../analog/custom";
 import { type AtlasData, type Evaluation, type GroupScore, percent, type Profile, type Quality } from "../analog/data";
 import { Radar } from "../analog/Radar";
 import { groupsOf } from "../analog/scoring";
@@ -52,7 +53,7 @@ export function Comparison({ data, profile, evaluation, label, pressure }: Props
     <>
       <Radar dimensions={groups} scores={scores} />
       <p className="atlas-legend">
-        <i className="atlas-key atlas-key-site" /> {label} <i className="atlas-key atlas-key-target" /> {where(profile)}, {profile.name.toLowerCase()} (outer ring)
+        <i className="atlas-key atlas-key-site" /> {label} <i className="atlas-key atlas-key-target" /> {where(profile)}, {versionLabel(profile)} (outer ring)
       </p>
 
       <section className="atlas-section">

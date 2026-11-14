@@ -4,8 +4,10 @@
  * as a snapshot. The questions that call something missing, estimated or
  * coarse are generated only from what that evaluation and the grid say.
  */
-import { type Evaluation, groupsOf, type Profile } from "../analog/scoring";
-import { type DatasetNote, newId, type ObservationRequest, type Question, ROVER_NOTE, type SiteRef, type SourceNote, type VerificationRequest } from "./types";
+import { type CustomTarget, versionLabel } from "../analog/custom";
+import { type Evaluation, groupsOf, type Profile, profileById } from "../analog/scoring";
+import type { PremadeVideoPlan } from "../analog/premade";
+import { type DatasetNote, newId, type ObservationRequest, PREMADE_NOTE, type Question, ROVER_NOTE, type SiteRef, type SourceNote, type VerificationRequest } from "./types";
 
 /** Dates and resolutions that this project's build scripts and README state for each dataset. Null: not recorded. */
 const DATASET_FACTS: Record<string, { date: string | null; resolution: string | null }> = {
@@ -26,7 +28,11 @@ export interface DraftInput {
   profile: Profile;
   evaluation: Evaluation;
   basis: "curated-site" | "grid-point";
+  /** The custom lunar target behind `profile`, when it is not one of the fixed profiles. */
+  customTarget?: CustomTarget | null;
   heatmapCell: VerificationRequest["model"]["heatmapCell"];
+  /** Set when the place's cell is one where a pre-made rover video is planned (from the heatmap's complete scores). */
+  premadeVideo?: PremadeVideoPlan | null;
   /** Datasets behind the Earth values, by their id in the grid header or in analogs.json. */
   datasets: { id: string; source: SourceNote; fromSite?: boolean }[];
   /** Other sources (papers, the target body's datasets). */
@@ -51,6 +57,7 @@ const ESTIMATE_PROMPTS: [RegExp, string][] = [
 
 export function draftRequest(input: DraftInput): VerificationRequest {
   const { site, profile, evaluation, basis } = input;
+  const custom = input.customTarget ?? null;
   const cellKm = Math.round(111.2 * input.cellDegrees);
 
   const questions: Question[] = [
@@ -140,9 +147,23 @@ export function draftRequest(input: DraftInput): VerificationRequest {
       heatmapCell: heat,
       note,
       gridGenerated: input.gridGenerated,
+      customTarget: custom
+        ? {
+            custom: true,
+            name: custom.name,
+            lat: custom.lat,
+            lon: custom.lon,
+            createdAt: custom.createdAt,
+            baseProfileId: custom.baseId,
+            baseProfileName: profileById(custom.baseId).name,
+            terrain: custom.terrain,
+            lowSun: custom.lowSun,
+            provenance: custom.provenance,
+          }
+        : null,
       sources: [...new Map([...input.datasets.map((d) => d.source), ...input.sources].map((s) => [s.label, s])).values()],
     },
-    purpose: `Check that ${site.name} is represented correctly before it is considered further as an Earth analog for ${bodyName(profile)} (${profile.name.toLowerCase()}).`,
+    purpose: `Check that ${site.name} is represented correctly before it is considered further as an Earth analog for ${bodyName(profile)} (${versionLabel(profile)}).`,
     video: { kind: "none", description: "" },
     route: [],
     camera: null,
@@ -150,6 +171,7 @@ export function draftRequest(input: DraftInput): VerificationRequest {
     questions,
     observationRequests: asks,
     rover: { status: "not-integrated", note: ROVER_NOTE },
+    ...(input.premadeVideo ? { premadeVideo: { recordType: "planned pre-made rover video" as const, ...input.premadeVideo, note: PREMADE_NOTE } } : {}),
   };
 }
 

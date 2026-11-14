@@ -3,11 +3,12 @@ import { percent } from "../../analog/data";
 import { GROUPS } from "../../analog/scoring";
 import { topShare } from "../../analog/heatmap";
 import { formatLat, formatLon } from "../../geo/coords";
+import { ProvenanceList } from "../CustomTarget";
 import type { GlobeController } from "../../globe/GlobeController";
 import { travel } from "../../state/navigation";
 import { useBlobUrl } from "../../verify/db";
 import type { LatLon } from "../../verify/route";
-import type { ModelSnapshot, SiteRef, VerificationRequest, VideoRef } from "../../verify/types";
+import type { ModelSnapshot, PremadeVideoNote, SiteRef, VerificationRequest, VideoRef } from "../../verify/types";
 
 const QUALITY: Record<string, string> = { measured: "measured", map: "mapped", literature: "published", proxy: "estimated" };
 
@@ -28,6 +29,21 @@ export function flyToSite(globe: GlobeController | null, site: SiteRef, span = 6
 }
 
 /** The model-derived score as it was when the request was made. Read-only everywhere. */
+/** The planned pre-made rover video of a request, kept apart from its video: a status, not something to play. */
+export function PremadeVideoSummary({ plan }: { plan: PremadeVideoNote }) {
+  return (
+    <div className="verify-premade" role="note">
+      <p>
+        <span className="verify-badge is-planned">To be recorded</span> <strong>Pre-made rover video: planned, not recorded.</strong>
+      </p>
+      <p className="verify-fact">
+        Target {plan.targetName} ({plan.targetId}{plan.custom ? ", custom lunar target" : ""}). The {plan.cellDegrees}° cell centred {formatLat(plan.cellCentre.lat, 2)}, {formatLon(plan.cellCentre.lon, 2)} ranks {plan.shownRank} of land cells
+        (percentile rank {(plan.percentileRank * 100).toFixed(2)}); rule: {plan.rule}. {plan.note}
+      </p>
+    </div>
+  );
+}
+
 export function ModelSummary({ model }: { model: ModelSnapshot }) {
   const c = model.evaluation.confidence;
   const h = model.heatmapCell;
@@ -39,7 +55,7 @@ export function ModelSummary({ model }: { model: ModelSnapshot }) {
       <dl className="cell-heat-rows">
         <div>
           <dt>
-            Similarity to {model.body === "moon" ? "the Moon" : "Mars"}, {model.profileName.toLowerCase()}
+            Similarity to {model.body === "moon" ? "the Moon" : "Mars"}, {model.customTarget ? `custom point ${model.profileName}` : model.profileName.toLowerCase()}
           </dt>
           <dd>{percent(model.overall)}</dd>
         </div>
@@ -59,6 +75,16 @@ export function ModelSummary({ model }: { model: ModelSnapshot }) {
       <p className="verify-hint">
         {model.note} Scored {model.scoredAt.slice(0, 10)} by the app's shared scoring function. Contributor responses and reviews are stored separately and never change it.
       </p>
+      {model.customTarget && (
+        <details className="atlas-sources" open>
+          <summary>Custom target: a point flagged on the Moon</summary>
+          <p className="verify-hint">
+            The comparison target of this request is not one of the fixed profiles. It is {model.customTarget.name}, at {formatLat(model.customTarget.lat)}, {formatLon(model.customTarget.lon)} on the
+            Moon, created {model.customTarget.createdAt.slice(0, 10)}. Fields that could not be established for the point are inherited from the fixed profile "{model.customTarget.baseProfileName}".
+          </p>
+          <ProvenanceList rows={model.customTarget.provenance} />
+        </details>
+      )}
       <details className="atlas-sources">
         <summary>Score breakdown and data confidence</summary>
         <ul className="verify-groups">

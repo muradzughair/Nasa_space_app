@@ -15,6 +15,8 @@ import { type Profile, similarity } from "./scoring";
 
 export interface CellScores {
   profileId: string;
+  /** profileKey() of the profile these scores are for. */
+  key: string;
   /** Similarity of each stored cell, 0 to 1, in the grid's own cell order. */
   scores: Float64Array;
   /** The same values in ascending order, for percentile ranks. */
@@ -42,13 +44,31 @@ export function scoreCell(grid: Grid, i: number, profile: Profile): number {
   return similarity(cellAt(grid, lat, lon)!.measures, profile);
 }
 
+const keys = new WeakMap<Profile, string>();
+const ordered = (v: object) => Object.entries(v).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+/**
+ * Everything similarity() reads from a profile, as text. The cache is keyed
+ * on this, not on a name or an id: two targets share scores only when every
+ * number that enters the score is the same, so a newly flagged point can
+ * never be shown with another point's map.
+ */
+export function profileKey(p: Profile): string {
+  let key = keys.get(p);
+  if (!key) {
+    key = JSON.stringify([p.body, ordered(p.minerals), p.terrain.slope, p.terrain.roughness, p.terrain.relief, ordered(p.landforms), p.thermal.mean, p.thermal.swing, p.thermal.ice, !!p.acid, p.albedo, !!p.lowSun, ordered(p.weights)]);
+    keys.set(p, key);
+  }
+  return key;
+}
+
 interface Job {
   scores: Float64Array;
   next: number;
   done: CellScores | null;
 }
 
-/** One job per grid and profile. An interrupted job keeps its progress and resumes when asked for again. */
+/** One job per grid and profile content (profileKey). An interrupted job keeps its progress and resumes when asked for again. */
 const jobs = new WeakMap<Grid, Map<string, Job>>();
 
 /** A turn of the event loop, so input and painting run between slices of work. */
@@ -60,9 +80,19 @@ const breathe = () =>
   });
 
 /** Finished scores for a profile, if they are already in the cache. */
-export function cachedCellScores(grid: Grid, profileId: string): CellScores | null {
-  return jobs.get(grid)?.get(profileId)?.done ?? null;
+export function cachedCellScores(grid: Grid, profile: Profile): CellScores | null {
+  const done = jobs.get(grid)?.get(profileKey(profile))?.done ?? null;
+  // The same content under another id or name (a renamed custom target): same scores, current label.
+  return done && done.profileId !== profile.id ? { ...done, profileId: profile.id } : done;
 }
+
+/** Forgets the scores of a profile, when a custom target is removed. */
+export function dropCellScores(profile: Profile): void {
+  const key = profileKey(profile);
+  // A WeakMap cannot be listed, so the grid is passed in by whoever holds it; without one there is nothing cached to drop.
+  if (lastGrid) jobs.get(lastGrid)?.delete(key);
+}
+let lastGrid: Grid | null = null;
 
 /**
  * Scores every land cell against a profile in slices of about 10 ms.
@@ -77,8 +107,10 @@ export async function computeCellScores(
 ): Promise<CellScores | null> {
   let perGrid = jobs.get(grid);
   if (!perGrid) jobs.set(grid, (perGrid = new Map()));
-  let job = perGrid.get(profile.id);
-  if (!job) perGrid.set(profile.id, (job = { scores: new Float64Array(grid.cells.length), next: 0, done: null }));
+  lastGrid = grid;
+  const key = profileKey(profile);
+  let job = perGrid.get(key);
+  if (!job) perGrid.set(key, (job = { scores: new Float64Array(grid.cells.length), next: 0, done: null }));
   const count = grid.cells.length;
   while (!job.done) {
     if (signal?.aborted) return null;
@@ -89,13 +121,14 @@ export async function computeCellScores(
       job.scores[i] = scoreCell(grid, i, profile);
       job.next = i + 1;
     }
-    if (job.next >= count) job.done ??= { profileId: profile.id, scores: job.scores, sorted: Float64Array.from(job.scores).sort() };
+    if (job.next >= count) job.done ??= { profileId: profile.id, key, scores: job.scores, sorted: Float64Array.from(job.scores).sort() };
     else {
       onProgress?.(job.next / count);
       await breathe();
     }
   }
-  return signal?.aborted ? null : job.done;
+  if (signal?.aborted) return null;
+  return job.done.profileId === profile.id ? job.done : { ...job.done, profileId: profile.id };
 }
 
 /**
@@ -115,10 +148,15 @@ export function percentileRank(cells: CellScores, score: number): number {
   return lo / sorted.length;
 }
 
+/** The number in "top 0.4%", as text: the share of land cells scoring at least as high, rounded the way the card shows it. */
+export function shownTopPercent(rank: number): string {
+  const top = Math.max(0, (1 - rank) * 100);
+  return top < 0.1 ? "0.1" : top < 10 ? top.toFixed(1) : `${Math.round(top)}`;
+}
+
 /** "top 0.4%": where a percentile rank puts a cell among all land cells. */
 export function topShare(rank: number): string {
-  const top = Math.max(0, (1 - rank) * 100);
-  return top < 0.1 ? "top 0.1%" : top < 10 ? `top ${top.toFixed(1)}%` : `top ${Math.round(top)}%`;
+  return `top ${shownTopPercent(rank)}%`;
 }
 
 export interface Distribution {
@@ -223,12 +261,13 @@ export function cellSummary(grid: Grid, profile: Profile, cells: CellScores | nu
   const i = cellIndexAt(grid, lat, lon);
   if (i < 0) return null;
   const centre = cellCentre(grid, i);
-  const score = cells?.profileId === profile.id ? cells.scores[i] : scoreCell(grid, i, profile);
+  const mine = cells?.key === profileKey(profile);
+  const score = mine ? cells.scores[i] : scoreCell(grid, i, profile);
   return {
     centreLat: centre.lat,
     centreLon: centre.lon,
     cellDegrees: grid.header.cellDegrees,
     score,
-    percentileRank: cells?.profileId === profile.id ? percentileRank(cells, score) : null,
+    percentileRank: mine ? percentileRank(cells, score) : null,
   };
 }

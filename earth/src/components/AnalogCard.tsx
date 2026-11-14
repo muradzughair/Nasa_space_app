@@ -2,15 +2,19 @@ import { useMemo } from "react";
 import type { AtlasData, Site } from "../analog/data";
 import { type Grid, siteMeasures } from "../analog/grid";
 import { cellSummary } from "../analog/heatmap";
-import { evaluate, profileById, similarity } from "../analog/scoring";
+import { premadeVideoPlan } from "../analog/premade";
+import { customTarget, evaluateTarget, resolveProfile, useCustomTargets, versionLabel } from "../analog/custom";
+import { similarity } from "../analog/scoring";
 import { formatLat, formatLon } from "../geo/coords";
 import type { GlobeController } from "../globe/GlobeController";
 import { travel } from "../state/navigation";
 import { updateAtlas, useStore } from "../state/store";
+import { TargetDetails } from "./CustomTarget";
 import { Comparison, SourceList, where } from "./Comparison";
 import { BackIcon, CloseIcon } from "./icons";
 import { useCellScores } from "./HeatmapControls";
 import { BodyScores, featureNote, sourcesOf, useGrid } from "./InfoCard";
+import { RoverVideoSection, SimulateRover } from "./SimulateRover";
 import { HeatmapCellNote, RequestVerification } from "./verify/RequestAction";
 import { flyToProfile } from "./TargetBar";
 
@@ -52,9 +56,11 @@ export function AnalogCard({ globe, data, site }: Props) {
 function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
   const atlas = useStore((s) => s.atlas);
   const planet = useStore((s) => s.planet);
-  const profile = profileById(atlas.profiles[atlas.body]);
+  useCustomTargets();
+  const profile = resolveProfile(atlas.profiles[atlas.body]);
+  const custom = customTarget(profile.id);
   const { measures, features } = useMemo(() => siteMeasures(grid, site), [grid, site]);
-  const evaluation = useMemo(() => evaluate(measures, profile), [measures, profile]);
+  const evaluation = useMemo(() => evaluateTarget(measures, profile), [measures, profile]);
   const place = useMemo(
     () => 1 + data.sites.filter((other) => other.id !== site.id && similarity(siteMeasures(grid, other).measures, profile) > evaluation.overall).length,
     [data, grid, site, profile, evaluation],
@@ -63,6 +69,8 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
   const heatmapOn = useStore((s) => s.heatmap.on);
   const { cells } = useCellScores(grid, profile, heatmapOn);
   const summary = useMemo(() => cellSummary(grid, profile, cells, site.lat, site.lon), [grid, profile, cells, site]);
+  // The site's cell is a place for a pre-made rover video: only from the heatmap's complete scores for this profile.
+  const plan = heatmapOn ? premadeVideoPlan(summary, profile) : null;
   const siteDatasets = [...new Set(Object.values(site.m).map((m) => m.src))].filter((id) => data.sources[id]?.kind === "dataset");
   const gridDatasets = Object.entries(grid.header.sources).filter(([, x]) => /POWER|GLiM|Impact|Volcanism/.test(x.label));
   const found = featureNote(features);
@@ -75,17 +83,20 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
     <>
       <BodyScores measures={measures} atlas={atlas} />
       <p className="cell-scale">
-        Ranked {place} of {data.sites.length} reference sites for {where(profile)}, {profile.name.toLowerCase()}.
+        Ranked {place} of {data.sites.length} reference sites for {where(profile)}, {versionLabel(profile)}.
       </p>
 
       {heatmapOn && summary && <HeatmapCellNote summary={summary} profile={profile} here={{ label: "This reference site", score: evaluation.overall }} kind="site" />}
+      {plan && <RoverVideoSection plan={plan} />}
       <RequestVerification
         input={{
           site: { name: site.name, lat: site.lat, lon: site.lon, kind: "curated-site", siteId: site.id, country: site.country },
           profile,
           evaluation,
           basis: "curated-site",
+          customTarget: custom,
           heatmapCell: summary,
+          premadeVideo: plan,
           datasets: [
             ...siteDatasets.map((id) => ({ id, source: data.sources[id], fromSite: true })),
             ...gridDatasets.filter(([id]) => !siteDatasets.includes(id)).map(([id, source]) => ({ id, source })),
@@ -97,7 +108,11 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
         }}
       />
 
+      {custom && <TargetDetails target={custom} />}
+
       <Comparison data={data} profile={profile} evaluation={evaluation} label={site.name.split(",")[0]} pressure={measures.pressure} />
+
+      {planet === "earth" && <SimulateRover globe={globe} place={{ name: site.name, lat: site.lat, lon: site.lon, kind: "curated-site" }} profile={profile} />}
 
       <div className="atlas-actions">
         <button type="button" className={`card-action${onTarget ? " is-primary" : ""}`} onClick={flySite}>

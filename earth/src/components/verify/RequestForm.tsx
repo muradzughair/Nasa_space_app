@@ -8,7 +8,7 @@ import { save } from "../../verify/db";
 import { download, slug } from "../../verify/exchange";
 import { routeLength, straightRoute } from "../../verify/route";
 import { newId, type ObservationRequest, type Question, ROVER_NOTE, type VerificationRequest, type VideoKind } from "../../verify/types";
-import { exact, Field, flyToSite, ModelSummary, useOverlay, usePick, VideoPlayer } from "./parts";
+import { exact, Field, flyToSite, ModelSummary, PremadeVideoSummary, useOverlay, usePick, VideoPlayer } from "./parts";
 
 const STATUS_LABEL: Record<ObservationRequest["status"], string> = { missing: "missing", estimated: "estimated", coarse: "coarse data", researcher: "your request" };
 
@@ -174,8 +174,9 @@ export function RequestForm({ globe }: { globe: GlobeController | null }) {
       <section className="verify-section">
         <h3>Walkthrough video</h3>
         <p className="verify-rover">
-          <strong>Rover simulation: not connected.</strong> {ROVER_NOTE}
+          <strong>Rover simulation: not linked to this request.</strong> {ROVER_NOTE}
         </p>
+        {draft.premadeVideo && <PremadeVideoSummary plan={draft.premadeVideo} />}
         <div className="verify-choice" role="radiogroup" aria-label="Video source">
           {(
             [

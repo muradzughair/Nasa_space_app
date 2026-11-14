@@ -59,6 +59,7 @@ export async function buildBundle(requestId?: string): Promise<Bundle> {
       LOCAL_NOTE,
       "Three kinds of record are kept apart: requests[].model is the model-derived score (a snapshot, never edited by responses); responses[] are contributor observations; reviews[] are reviewed findings.",
       '"Accepted" means accepted by the reviewer in this workflow. It is not an approval by NASA or any agency.',
+      "requests[].premadeVideo, where present, records that a pre-made rover video is planned for the place and not yet recorded (status to-be-recorded). It is not a video and has no file; requests[].video is the request's only video.",
     ],
     requests,
     responses,
@@ -111,7 +112,15 @@ export function reportMarkdown(request: VerificationRequest, responses: Contribu
   push(`# Site verification report: ${site.name}`, "", `Request ${request.id}, created ${request.createdAt}. Report written ${new Date().toISOString()}.`, "", `> ${LOCAL_NOTE}`, "");
   push("## Site", "", `- Name: ${site.name}`, `- Coordinates (latitude, longitude, WGS84): ${coords(site.lat, site.lon)}`, `- Kind: ${site.kind === "curated-site" ? "curated reference site" : "point in a grid cell"}`, `- Purpose: ${request.purpose}`, "");
   push("## 1. Model-derived score (not changed by any response)", "");
-  push(`- Target profile: ${model.body === "moon" ? "Moon" : "Mars"}, ${model.profileName} (${model.profileId})`, `- Similarity: ${pct(model.overall)}`, `- Method: ${model.method}`);
+  push(`- Target profile: ${model.body === "moon" ? "Moon" : "Mars"}, ${model.customTarget ? "custom point " : ""}${model.profileName} (${model.profileId})`);
+  if (model.customTarget) {
+    const t = model.customTarget;
+    push(
+      `- Custom target: yes. A point flagged on the Moon at ${coords(t.lat, t.lon)}, created ${t.createdAt.slice(0, 10)}; fields not established for the point are inherited from the fixed profile "${t.baseProfileName}" (${t.baseProfileId}).`,
+      ...t.provenance.map((row) => `  - ${row.field}: ${row.value} [${row.how}] ${row.source}`),
+    );
+  }
+  push(`- Similarity: ${pct(model.overall)}`, `- Method: ${model.method}`);
   if (model.heatmapCell) {
     const h = model.heatmapCell;
     push(`- Heatmap cell (${h.cellDegrees}° cell centred ${coords(h.centreLat, h.centreLon)}): similarity ${pct(h.score)}${h.percentileRank != null ? `; percentile rank ${(h.percentileRank * 100).toFixed(1)} among land cells (a rank, not a similarity)` : ""}`);
@@ -131,6 +140,12 @@ export function reportMarkdown(request: VerificationRequest, responses: Contribu
     v.kind === "none" ? "- No video attached." : v.kind === "terrain-preview" ? `- Terrain preview recorded in the app (${v.fileName ?? "video"}). ${v.description}` : v.kind === "url" ? `- Video link: ${v.url}. ${v.description}` : `- Attached video file: ${v.fileName}. ${v.description}`,
     `- Rover integration: ${request.rover.note}`,
   );
+  if (request.premadeVideo) {
+    const p = request.premadeVideo;
+    push(
+      `- Pre-made rover video: planned, to be recorded (not a video; nothing to play). Target ${p.targetName} (${p.targetId}${p.custom ? ", custom lunar target" : ""}); the ${p.cellDegrees}° cell centred ${coords(p.cellCentre.lat, p.cellCentre.lon)} ranks ${p.shownRank} of land cells (percentile rank ${(p.percentileRank * 100).toFixed(2)}); rule: ${p.rule}. ${p.note}`,
+    );
+  }
   if (request.route.length) push(`- Route (${Math.round(routeLength(request.route))} m): ${request.route.map((p) => coords(p.lat, p.lon)).join(" → ")}`);
   if (request.camera) push(`- Camera: ${request.camera.heightM} m above the terrain, pitch ${request.camera.pitchDeg}°, ${request.camera.durationS} s; imagery: ${request.camera.imagery}`);
   push("", "## Questions", "", ...request.questions.map((q, i) => `${i + 1}. ${q.text}`), "", "## Observations asked for", "");
@@ -167,7 +182,7 @@ export function roverHandoff(request: VerificationRequest) {
     version: 1,
     requestId: request.id,
     site: { name: request.site.name, lat: request.site.lat, lon: request.site.lon, datum: "WGS84" },
-    profile: { id: request.model.profileId, body: request.model.body, name: request.model.profileName },
+    profile: { id: request.model.profileId, body: request.model.body, name: request.model.profileName, customTarget: request.model.customTarget ?? null },
     route: { waypoints: request.route, lengthM: Math.round(routeLength(request.route)), note: "Waypoints chosen by the researcher on the globe. Heights are not included; take them from your own elevation data." },
     camera: request.camera,
     expectedReturn: "A video file or URL of the simulated walkthrough, attached to this request id. State which details are procedurally generated: they must not be presented to contributors as measured site features.",

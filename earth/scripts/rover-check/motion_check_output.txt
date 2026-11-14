@@ -1,0 +1,49 @@
+Part 1: the old real grounds in the ported Site View (compare with the old tests/motion_check_output.txt)
+
+== mars_jezero: real ground, fine grid 2049 at 0.98 m, rover Perseverance, 1601 steps of 0.25 m, 3 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 13.7 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.264 m, 95 % spread 11 mm, worst 21 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 3.1 mm against the contact plane, pitch 1.40 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (4 of 4 tiles within 25 m at 1:1, largest edge offset 93 mm, 233024 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 13.7 mm)
+PASS  HUD tilt is the contact-plane tilt on the drawn grid at every route sample  (largest difference 1.2e-4 deg, from the route being stored as float32; the HUD shows 0.1 deg)
+PASS  drive mode: the rover drives and sits on the fine grid  (3.5 m driven, pitch 3.9 deg, sinkage 13.6 mm, body 0 mm from the contact plane, 4 tiles at 1:1)
+PASS  zero console and page errors
+
+== mars_gale: real ground, fine grid 2049 at 0.98 m, rover Perseverance, 1601 steps of 0.25 m, 5 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 13.7 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.264 m, 95 % spread 9 mm, worst 13 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 2.7 mm against the contact plane, pitch 0.80 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (2 of 2 tiles within 25 m at 1:1, largest edge offset 38 mm, 242720 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 13.7 mm)
+PASS  HUD tilt is the contact-plane tilt on the drawn grid at every route sample  (largest difference 1.7e-4 deg, from the route being stored as float32; the HUD shows 0.1 deg)
+PASS  drive mode: the rover drives and sits on the fine grid  (3.2 m driven, pitch 0.4 deg, sinkage 13.7 mm, body 0 mm from the contact plane, 4 tiles at 1:1)
+PASS  zero console and page errors
+
+Part 2: Earth points opened through "Simulate a rover here" (Earth gravity, soil from the grid by rule)
+
+== earth_harrat_khaybar: real ground, fine grid 513 at 3.91 m, rover Perseverance, 1601 steps of 0.25 m, 2 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 2.3 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.270 m, 95 % spread 18 mm, worst 30 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 8.5 mm against the contact plane, pitch 1.43 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (1 of 1 tiles within 25 m at 1:1, largest edge offset 0 mm, 102272 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 2.3 mm)
+PASS  HUD tilt is the contact-plane tilt on the drawn grid at every route sample  (largest difference 1.2e-4 deg, from the route being stored as float32; the HUD shows 0.1 deg)
+PASS  drive mode: the rover drives and sits on the fine grid  (1.5 m driven, pitch 4.6 deg, sinkage 2.3 mm, body -0 mm from the contact plane, 8 tiles at 1:1)
+PASS  zero console and page errors
+
+== earth_atacama_yungay: real ground, fine grid 513 at 3.91 m, rover Perseverance, 1601 steps of 0.25 m, 3 tile borders crossed
+PASS  the ground is the real fine grid
+PASS  rests on the surface at the start  (body plane 0.0 mm from the contact plane, computed sinkage 2.3 mm)
+PASS  all wheels stay on the fine height grid  (hub height above its ground point: median 0.266 m, 95 % spread 9 mm, worst 12 mm)
+PASS  no popping: body height and pitch change gradually  (largest step-to-step change: body 12.6 mm against the contact plane, pitch 0.36 deg per 0.25 m)
+PASS  tiles under the rover are at full detail and stitched edges stay on the grid  (1 of 1 tiles within 25 m at 1:1, largest edge offset 0 mm, 118784 triangles)
+PASS  wheel tracks are laid  (801 track samples, sinkage up to 2.3 mm)
+PASS  HUD tilt is the contact-plane tilt on the drawn grid at every route sample  (largest difference 2.5e-5 deg, from the route being stored as float32; the HUD shows 0.1 deg)
+PASS  drive mode: the rover drives and sits on the fine grid  (2.1 m driven, pitch 15.1 deg, sinkage 2.3 mm, body 0 mm from the contact plane, 8 tiles at 1:1)
+PASS  zero console and page errors
+
+all passed
