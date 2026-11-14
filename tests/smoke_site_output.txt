@@ -1,20 +1,20 @@
 
 == Moon target (south pole), hotspot 1
-PASS  Site View opens  (4.4 s with a software renderer)
+PASS  Site View opens  (4.9 s with a software renderer)
 PASS  perseverance: rover selected and 2 instances built
-PASS  perseverance: both 3D views show something  (left {"mean":38.9,"sd":25.8} right {"mean":92.4,"sd":55.8})
+PASS  perseverance: both 3D views show something  (left {"mean":34.8,"sd":20.4} right {"mean":75.8,"sd":50.2})
 PASS  perseverance: comparison, explanation and rover simulation panels have content  (315 / 468 / 1033 chars)
 PASS  perseverance: no "Could not load" notice
 PASS  curiosity: rover selected and 2 instances built
-PASS  curiosity: both 3D views show something  (left {"mean":38.9,"sd":25.8} right {"mean":92.4,"sd":55.8})
+PASS  curiosity: both 3D views show something  (left {"mean":33.8,"sd":20.8} right {"mean":73.8,"sd":47.2})
 PASS  curiosity: comparison, explanation and rover simulation panels have content  (315 / 468 / 1040 chars)
 PASS  curiosity: no "Could not load" notice
 PASS  scarecrow: rover selected and 2 instances built
-PASS  scarecrow: both 3D views show something  (left {"mean":38.9,"sd":25.8} right {"mean":92.4,"sd":55.8})
+PASS  scarecrow: both 3D views show something  (left {"mean":17.3,"sd":23.1} right {"mean":108.8,"sd":53.2})
 PASS  scarecrow: comparison, explanation and rover simulation panels have content  (315 / 468 / 1078 chars)
 PASS  scarecrow: no "Could not load" notice
 PASS  lunar_generic: rover selected and 2 instances built
-PASS  lunar_generic: both 3D views show something  (left {"mean":38.9,"sd":25.8} right {"mean":92.4,"sd":55.8})
+PASS  lunar_generic: both 3D views show something  (left {"mean":17.3,"sd":23.1} right {"mean":108.8,"sd":53.2})
 PASS  lunar_generic: comparison, explanation and rover simulation panels have content  (315 / 468 / 1072 chars)
 PASS  lunar_generic: no "Could not load" notice
 PASS  drive mode opens
@@ -23,73 +23,45 @@ PASS  zero console and page errors
 PASS  zero failed requests
 
 == Mars target (Gale), hotspot 1
-PASS  Site View opens  (11.3 s with a software renderer)
+PASS  Site View opens  (6.6 s with a software renderer)
 PASS  perseverance: rover selected and 2 instances built
-PASS  perseverance: both 3D views show something  (left {"mean":106.2,"sd":38.4} right {"mean":124.2,"sd":48.7})
+PASS  perseverance: both 3D views show something  (left {"mean":83.8,"sd":33.3} right {"mean":103.8,"sd":46.8})
 PASS  perseverance: comparison, explanation and rover simulation panels have content  (334 / 462 / 1033 chars)
 PASS  perseverance: no "Could not load" notice
 PASS  curiosity: rover selected and 2 instances built
-PASS  curiosity: both 3D views show something  (left {"mean":106.1,"sd":38.4} right {"mean":124.2,"sd":48.7})
+PASS  curiosity: both 3D views show something  (left {"mean":83.8,"sd":33.3} right {"mean":103.8,"sd":46.8})
 PASS  curiosity: comparison, explanation and rover simulation panels have content  (334 / 462 / 1040 chars)
 PASS  curiosity: no "Could not load" notice
 PASS  scarecrow: rover selected and 2 instances built
-PASS  scarecrow: both 3D views show something  (left {"mean":106.1,"sd":38.4} right {"mean":124.2,"sd":48.7})
+PASS  scarecrow: both 3D views show something  (left {"mean":83.8,"sd":33.3} right {"mean":103.8,"sd":46.8})
 PASS  scarecrow: comparison, explanation and rover simulation panels have content  (334 / 462 / 1078 chars)
 PASS  scarecrow: no "Could not load" notice
 PASS  lunar_generic: rover selected and 2 instances built
-PASS  lunar_generic: both 3D views show something  (left {"mean":106.1,"sd":38.4} right {"mean":124.2,"sd":48.7})
+PASS  lunar_generic: both 3D views show something  (left {"mean":83.8,"sd":33.3} right {"mean":103.8,"sd":46.8})
 PASS  lunar_generic: comparison, explanation and rover simulation panels have content  (334 / 462 / 1073 chars)
 PASS  lunar_generic: no "Could not load" notice
 PASS  zero console and page errors
 PASS  zero failed requests
 
 == Moon target (Apollo 11), hotspot 3, a different Earth analog
-PASS  Site View opens  (6.3 s with a software renderer)
+PASS  Site View opens  (5.6 s with a software renderer)
 PASS  perseverance: rover selected and 2 instances built
-PASS  perseverance: both 3D views show something  (left {"mean":81.3,"sd":38.3} right {"mean":126.5,"sd":47.8})
+PASS  perseverance: both 3D views show something  (left {"mean":62.3,"sd":25.8} right {"mean":102.8,"sd":45.7})
 PASS  perseverance: comparison, explanation and rover simulation panels have content  (324 / 488 / 1033 chars)
 PASS  perseverance: no "Could not load" notice
 PASS  curiosity: rover selected and 2 instances built
-PASS  curiosity: both 3D views show something  (left {"mean":81.3,"sd":38.3} right {"mean":126.5,"sd":47.8})
+PASS  curiosity: both 3D views show something  (left {"mean":62.3,"sd":25.9} right {"mean":119.2,"sd":45.3})
 PASS  curiosity: comparison, explanation and rover simulation panels have content  (324 / 488 / 1040 chars)
 PASS  curiosity: no "Could not load" notice
 PASS  scarecrow: rover selected and 2 instances built
-PASS  scarecrow: both 3D views show something  (left {"mean":81.3,"sd":38.3} right {"mean":126.5,"sd":47.8})
+PASS  scarecrow: both 3D views show something  (left {"mean":62.3,"sd":25.9} right {"mean":119.2,"sd":45.3})
 PASS  scarecrow: comparison, explanation and rover simulation panels have content  (324 / 488 / 1078 chars)
 PASS  scarecrow: no "Could not load" notice
 PASS  lunar_generic: rover selected and 2 instances built
-PASS  lunar_generic: both 3D views show something  (left {"mean":81.3,"sd":38.3} right {"mean":126.5,"sd":47.8})
+PASS  lunar_generic: both 3D views show something  (left {"mean":62.3,"sd":25.9} right {"mean":119.2,"sd":45.3})
 PASS  lunar_generic: comparison, explanation and rover simulation panels have content  (324 / 488 / 1072 chars)
 PASS  lunar_generic: no "Could not load" notice
 PASS  zero console and page errors
 PASS  zero failed requests
-
-== injected failure: registry file missing (rovers.json 404)
-PASS  Site View still opens
-PASS  both 3D views still draw  (left {"mean":105.6,"sd":39.3} right {"mean":123.3,"sd":49.5})
-PASS  all three panels have content  (334 / 462 / 1134 chars)
-PASS  a plain "Could not load" note names the cause  (Could not load the rover registry (Cannot read properties of null (reading 'gravity_mps2')). A simple built-in rover is used.)
-PASS  no uncaught page errors
-
-== injected failure: stale or wrong registry (old rover_params format)
-PASS  Site View still opens
-PASS  both 3D views still draw  (left {"mean":105.6,"sd":39.3} right {"mean":123.3,"sd":49.5})
-PASS  all three panels have content  (334 / 462 / 1134 chars)
-PASS  a plain "Could not load" note names the cause  (Could not load the rover registry (raw.rovers.forEach is not a function). A simple built-in rover is used.)
-PASS  no uncaught page errors
-
-== injected failure: rover model fails to load (GLB 404)
-PASS  Site View still opens
-PASS  both 3D views still draw  (left {"mean":105.7,"sd":39.2} right {"mean":123.3,"sd":49.5})
-PASS  all three panels have content  (334 / 462 / 1033 chars)
-PASS  a plain "Could not load" note names the cause  (Could not load the rover model (assets/models/perseverance.glb): fetch for "http://localhost:8765/assets/models/perseverance.glb" responded with 404: Not Found.)
-PASS  no uncaught page errors
-
-== injected failure: ground textures fail to load
-PASS  Site View still opens
-PASS  both 3D views still draw  (left {"mean":157.9,"sd":55.6} right {"mean":174.2,"sd":58.2})
-PASS  all three panels have content  (334 / 462 / 1033 chars)
-PASS  a plain "Could not load" note names the cause  (Could not load the ground textures: could not fetch http://localhost:8765/assets/textures/ground/rocks_ground_02/rocks_ground_02_color_1k.jpg. A plain ground co)
-PASS  no uncaught page errors
 
 all checks passed

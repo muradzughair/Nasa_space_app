@@ -1,0 +1,28 @@
+PASS  F3 overlay shows fps, frame time, draw calls, triangles, pixel ratio, quality, shadow size, JS time  (1 fps   frame 894.4 ms (worst 917 ms, last 2 s) / JS 4.1 ms/frame   GPU n/a / draw calls 91   triangles 108,548 / quality Medium, lighter (auto)   pixel ratio 1.00   shadow 1024   AA on)
+PASS  ?bench=site finishes and reports a summary  (139 frames, average 6.9 fps, 1% low 1.1 fps, p50 100 ms, p99 883.3 ms, 65 draw calls, 52988 triangles, JS 2.56 ms, quality Lowest)
+PASS  summary is shown in a copyable panel and printed to the console
+      TerraAnalog benchmark (Site View orbit, 20 s)
+      average 6.9 fps, 1% low 1.1 fps, 139 frames
+      frame time p50 100 ms, p90 266.6, p95 616.6, p99 883.3, worst 883.3
+      JS 2.56 ms/frame, draw calls 65/frame, triangles 52,988/frame
+      quality at the end: Lowest (auto); changes: 0.0 s: High, 1x pixels | 0.9 s: Medium | 3.6 s: Medium, lighter | 6.4 s: Low | 8.9 s: Lowest
+      pixel ratio 0.75 (device 1), viewport 1366x768, antialias on, GPU timer no
+      GPU: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+      Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36
+PASS  auto quality stepped down on its own under slow frames (software renderer)  (0.0 s: High, 1x pixels | 0.9 s: Medium | 3.6 s: Medium, lighter | 6.4 s: Low | 8.9 s: Lowest)
+PASS  zero console and page errors
+PASS  ?bench finishes and reports a summary  (11 frames, average 0.5 fps, 1% low 0.3 fps, p50 933.3 ms, p99 3899.8 ms, 71 draw calls, 83873 triangles, JS 9.51 ms, quality Lowest)
+PASS  summary is shown in a copyable panel and printed to the console
+      TerraAnalog benchmark (drive mode, 20 s)
+      average 0.5 fps, 1% low 0.3 fps, 11 frames
+      frame time p50 933.3 ms, p90 3783.3, p95 3899.8, p99 3899.8, worst 3899.8
+      JS 9.51 ms/frame, draw calls 71/frame, triangles 83,873/frame
+      quality at the end: Lowest (auto); changes: 0.0 s: Medium | 3.8 s: Medium, lighter | 14.4 s: Low | 19.4 s: Lowest
+      pixel ratio 0.75 (device 1), viewport 1366x768, antialias on, GPU timer no
+      GPU: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+      Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.12 Safari/537.36
+PASS  auto quality stepped down on its own under slow frames (software renderer)  (0.0 s: Medium | 3.8 s: Medium, lighter | 14.4 s: Low | 19.4 s: Lowest)
+PASS  zero console and page errors
+PASS  quality popover offers Auto / High / Medium / Low and forcing Low works and is remembered  (Auto, High, Medium, Low; now Low (low))
+
+all passed

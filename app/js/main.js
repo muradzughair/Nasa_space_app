@@ -1,6 +1,7 @@
 // Home screen: target and purpose pickers, globe heat map, ranked hotspot list, About panel.
 import { D, ROOT, loadAll, ensurePatches, presetGrid, liveScore, weightsVec, pickHotspots, targetById, fmtTrait } from './data.js';
 import { createGlobe, motion } from './globeview.js';
+import { renderControl as qualityControl, benchKind, startBench } from './quality.js';
 
 const S = { target: null, purpose: 'rover', custom: null, hotspots: [] };
 let G = null;
@@ -201,6 +202,7 @@ function renderQuality() {
   const rows = D.meta.traits.map(t => `<tr><td>${TRAIT_NAME[t.key] || t.label}</td><td>${pill(ph.has(t.key) || m.earth_terrain === 'demo' && ['relief', 'slope_med', 'slope_p90', 'roughness'].includes(t.key))}</td></tr>`).join('');
   const tg = Object.entries(m.target_terrain || {}).map(([k, v]) => { const t = D.targets.find(x => x.id === k); return `<tr><td>${t ? t.short : k} terrain</td><td>${pill(v === 'demo')}</td></tr>`; }).join('');
   $('qualityPop').innerHTML = `<h4>Data quality, per trait</h4><table>${rows}${tg}<tr><td>Earth land shape</td><td>${pill(false)}</td></tr></table><p>${anyDemo ? 'Demo means a synthetic placeholder, not a measurement. Rankings are for demonstrating the method until the real NASA files are added.' : 'All traits come from real data.'} The About panel lists every source.</p>`;
+  qualityControl($('qualityPop'));   // graphics quality (Auto / High / Medium / Low) below the data-quality table
   const open = on => { $('qualityPop').classList.toggle('hidden', !on); b.setAttribute('aria-expanded', on ? 'true' : 'false'); };
   b.onclick = e => { e.stopPropagation(); open($('qualityPop').classList.contains('hidden')); };
   document.addEventListener('click', e => { if (!$('qualityPop').contains(e.target)) open(false); });
@@ -243,5 +245,23 @@ async function start() {
   if (gr.missing.length) $('hsMeta').textContent += ` Missing local files: ${gr.missing.join(', ')}.`;
   $('loading').classList.add('hidden');
   window.TERRA = { S, D, G };   // handy for debugging in the console and for automated tests
+  if (benchKind()) runBench(benchKind()).catch(e => { console.error('benchmark failed', e); });
+}
+/** ?bench (drive mode) or ?bench=site (Site View orbit): open the first site with its top Earth analog, run a 20 s scripted session, print the summary. */
+async function runBench(kind) {
+  const wait = async (fn, ms = 240000) => { const t = performance.now(); while (!fn()) { if (performance.now() - t > ms) throw new Error('benchmark timed out'); await new Promise(r => setTimeout(r, 100)); } };
+  document.querySelector('#targets .card').click(); await new Promise(r => setTimeout(r, 600));
+  document.querySelector('#hsList li').click();
+  await wait(() => window.TERRA_SITE && TERRA_SITE.open && !$('veil').classList.contains('on')); await new Promise(r => setTimeout(r, 1500));
+  const V = window.TERRA_SITE;
+  if (kind === 'drive') {
+    $('driveBtn').click(); await wait(() => !$('driveChooser').classList.contains('hidden'));
+    document.querySelector('#dcCards .dc-pick').click(); await wait(() => window.TERRA_DRIVE && TERRA_DRIVE.active);
+    window.TERRA_BENCH_INPUT = t => ({ throttle: 1, steer: Math.sin(t * 0.35) * 0.6, brake: 0 });   // forward with gentle weaving
+    const r = await startBench('drive'); window.TERRA_BENCH_INPUT = null; return r;
+  }
+  let on = true; const c = V.cams[0];   // orbit both linked views around the target
+  const spin = now => { if (!on) return; const t = c.controls.target, dx = c.camera.position.x - t.x, dz = c.camera.position.z - t.z, a = 0.006; c.camera.position.x = t.x + dx * Math.cos(a) - dz * Math.sin(a); c.camera.position.z = t.z + dx * Math.sin(a) + dz * Math.cos(a); c.controls.update(); V.dirty = 0; V.awake = performance.now() + 1e9; requestAnimationFrame(spin); };   // keep drawing for the whole run, however slow a frame is
+  requestAnimationFrame(spin); const r = await startBench('site'); on = false; V.awake = 0; return r;
 }
 start();

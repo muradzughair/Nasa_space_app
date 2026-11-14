@@ -49,9 +49,45 @@ export const saveBuildText = () => exportBuild(R.build);
 const loader = () => { const L = new THREE.GLTFLoader(); L.setMeshoptDecoder(THREE.MeshoptDecoder); return L; };
 function loadTemplate(file) {
   if (!R.templates.has(file)) {
-    R.templates.set(file, loader().loadAsync(ROOT + file).then(g => { R.stats.loaded++; return g.scene; }).catch(e => { R.templates.delete(file); throw e; }));
+    R.templates.set(file, loader().loadAsync(ROOT + file).then(g => { R.stats.loaded++; mergeStatic(g.scene); return g.scene; }).catch(e => { R.templates.delete(file); throw e; }));
   }
   return R.templates.get(file);
+}
+/** Fewer draw calls: the body's meshes are merged into one mesh per material, and each wheel's meshes into one per material inside its wheel node
+ *  (the wheel node keeps its own transform, so wheel posing and spinning are unchanged). Runs once per loaded model. Meshes whose attributes do not
+ *  match the rest of their material group are left as they are. */
+function mergeStatic(scene) {
+  const isWheel = o => /^wheel_\d\d_[LR]$/.test(o.name), v = new THREE.Vector3(), n = new THREE.Vector3(), nm = new THREE.Matrix3(), rel = new THREE.Matrix4(), inv = new THREE.Matrix4();
+  scene.updateMatrixWorld(true);
+  const groups = new Map();   // key: owner (scene or wheel node) + material -> meshes
+  scene.traverse(o => {
+    if (!o.isMesh || o.isSkinnedMesh || o.morphTargetInfluences || Array.isArray(o.material) || !o.visible || isWheel(o)) return;   // a wheel node that is itself a mesh stays as it is
+    let w = o.parent; while (w && w !== scene && !isWheel(w)) w = w.parent; const owner = w && w !== scene ? w : scene;
+    const sig = Object.keys(o.geometry.attributes).sort().join(',') + (o.geometry.index ? '|i' : '');
+    if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); const sc = o.matrixWorld.getMaxScaleOnAxis(), tiny = owner === scene && o.geometry.boundingSphere.radius * sc < 0.03;   // parts under 3 cm across: hidden at Low quality
+    const k = owner.uuid + '|' + o.material.uuid + '|' + sig + (tiny ? '|tiny' : ''); if (!groups.has(k)) groups.set(k, { owner, mat: o.material, meshes: [], tiny }); groups.get(k).meshes.push(o); if (tiny) o.userData.tiny = true;
+  });
+  for (const { owner, mat, meshes, tiny } of groups.values()) {
+    if (meshes.length < 2) continue;
+    inv.copy(owner.matrixWorld).invert();
+    const names = Object.keys(meshes[0].geometry.attributes).filter(a => a === 'position' || a === 'normal' || a === 'uv' || a === 'color'), total = meshes.reduce((q, m) => q + m.geometry.attributes.position.count, 0);
+    const out = Object.fromEntries(names.map(a => [a, new Float32Array(total * meshes[0].geometry.attributes[a].itemSize)])), idx = []; let base = 0;
+    for (const m of meshes) {
+      const g = m.geometry, P = g.attributes.position; rel.multiplyMatrices(inv, m.matrixWorld); nm.getNormalMatrix(rel);
+      for (let k = 0; k < P.count; k++) {
+        v.fromBufferAttribute(P, k).applyMatrix4(rel); out.position.set([v.x, v.y, v.z], (base + k) * 3);
+        if (out.normal) { n.fromBufferAttribute(g.attributes.normal, k).applyMatrix3(nm).normalize(); out.normal.set([n.x, n.y, n.z], (base + k) * 3); }
+        if (out.uv) { const U = g.attributes.uv; out.uv.set([U.getX(k), U.getY(k)], (base + k) * 2); }
+        if (out.color) { const Cc = g.attributes.color, c = Cc.itemSize; for (let q = 0; q < c; q++) out.color[(base + k) * c + q] = Cc.getComponent(k, q); }
+      }
+      if (g.index) for (let k = 0; k < g.index.count; k++) idx.push(base + g.index.getX(k)); else for (let k = 0; k < P.count; k++) idx.push(base + k);
+      if (rel.determinant() < 0) for (let k = idx.length - (g.index ? g.index.count : P.count); k < idx.length; k += 3) { const t = idx[k]; idx[k] = idx[k + 1]; idx[k + 1] = t; }   // mirrored parts keep their front faces
+      base += P.count; m.parent.remove(m); g.dispose();
+    }
+    const geo = new THREE.BufferGeometry(); for (const a of names) geo.setAttribute(a, new THREE.BufferAttribute(out[a], meshes[0].geometry.attributes[a].itemSize));
+    geo.setIndex(total > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1)); geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, mat); mesh.name = 'merged_' + (mat.name || 'mat'); mesh.userData.tiny = !!tiny; owner.add(mesh);
+  }
 }
 function disposeObject(o3, count = true) {
   const seen = new Set();
@@ -89,14 +125,16 @@ export async function createInstance(cfg) {
     return buildInstance(cfg, boxTemplate(cfg), true);
   }
 }
+const _ks = new THREE.Vector3();
 function buildInstance(cfg, tmpl, own) {
   const model = tmpl.clone(true), root = new THREE.Group(), lift = new THREE.Group(), mats = [];
   const isWheel = o => /^wheel_\d\d_[LR]$/.test(o.name);
-  model.traverse(o => { if (o.isMesh) { o.castShadow = true; let w = o; while (w && !isWheel(w)) w = w.parent; o.userData.isWheelPart = !!w; o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); for (const m of [].concat(o.material)) { if (m.metalness > 0.35) m.metalness = 0.35;   /* no environment map in the scenes, so strong metals render black */ m.userData.base = m.color ? m.color.clone() : null; mats.push([m, o.userData.isWheelPart]); } } });
+  model.traverse(o => { if (o.isMesh) { o.castShadow = true; let w = o; while (w && !isWheel(w)) w = w.parent; o.userData.isWheelPart = !!w; o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); for (const m of [].concat(o.material)) { if (m.transmission > 0) { m.transmission = 0; m.transparent = true; m.opacity = Math.min(m.opacity, 0.4); m.depthWrite = false; }   /* glass: plain transparency; transmission makes three.js render the whole scene a second time every frame */ if (m.metalness > 0.35) m.metalness = 0.35;   /* no environment map in the scenes, so strong metals render black */ m.userData.base = m.color ? m.color.clone() : null; mats.push([m, o.userData.isWheelPart]); } } });
+  model.updateMatrixWorld(true); model.traverse(o => { if (o.isMesh && !o.userData.isWheelPart) { if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); if (o.geometry.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis() < 0.12) o.castShadow = false; } });   // small parts do not cast shadows (fewer shadow draw calls)
   lift.add(model); root.add(lift); lift.scale.setScalar(cfg.model_scale);
   const inst = { root, lift, model, mats, cfg: null, wheels: [], file: cfg.model, decal: null, extra: [], own, dispose() { disposeInstance(inst); } };
   const nodes = {}; cfg.wheel_nodes.forEach(n => { nodes[n] = model.getObjectByName(n); });
-  inst.nodes = nodes; inst.y0 = {}; for (const n in nodes) if (nodes[n]) inst.y0[n] = nodes[n].position.y;
+  inst.nodes = nodes; inst.y0 = {}; inst.s0 = {}; for (const n in nodes) if (nodes[n]) { inst.y0[n] = nodes[n].position.y; inst.s0[n] = nodes[n].scale.clone(); }   // s0: the node's own scale (meshopt quantization stores the dequantization scale there)
   R.instances.add(inst); updateInstance(inst, cfg); return inst;
 }
 /** Apply an effective config to an instance: wheel size and width, wheel count (hide or duplicate), ride height, cosmetics. */
@@ -109,10 +147,10 @@ export function updateInstance(inst, cfg) {
   for (const name of cfg.wheel_nodes) {
     const node = inst.nodes[name]; if (!node) continue;
     node.visible = !(name.startsWith('wheel_02_') && !six && hasMid);
-    node.scale.set(kw, kr, kr);
+    node.scale.copy(inst.s0[name]).multiply(_ks.set(kw, kr, kr));   // relative to the node's own scale; overwriting it made every wheel about 4 times too big
   }
   if (six && !hasMid) {              // a 4-wheel model asked for 6 wheels: duplicate the front wheels at the middle row
-    for (const side of ['L', 'R']) { const src = inst.nodes['wheel_01_' + side]; if (!src) continue; const c = src.clone(); c.name = 'wheel_02_' + side; c.position.z = 0; src.parent.add(c); inst.extra.push(c); inst.nodes[c.name] = c; inst.y0[c.name] = c.position.y; }
+    for (const side of ['L', 'R']) { const src = inst.nodes['wheel_01_' + side]; if (!src) continue; const c = src.clone(); c.name = 'wheel_02_' + side; c.position.z = 0; src.parent.add(c); inst.extra.push(c); inst.nodes[c.name] = c; inst.y0[c.name] = c.position.y; inst.s0[c.name] = inst.s0['wheel_01_' + side].clone(); }
   }
   // wheel list for posing: one entry per active hub, with its forward and right offsets from the effective config
   inst.wheels = Object.keys(cfg.hub_by_name).filter(n => inst.nodes[n]).map(n => ({ node: inst.nodes[n], name: n, u: cfg.hub_by_name[n][0], v: cfg.hub_by_name[n][1], y0: inst.y0[n] }));

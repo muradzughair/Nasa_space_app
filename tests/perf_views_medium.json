@@ -1,0 +1,61 @@
+{
+ "label": "medium",
+ "quality": "medium",
+ "site": {
+  "frames": 21,
+  "leftPane": {
+   "calls": 153,
+   "tris": 180716
+  },
+  "rightPane": {
+   "calls": 316,
+   "tris": 358888
+  },
+  "js": {
+   "n": 24,
+   "mean": 6.19,
+   "p95": 10.1,
+   "max": 17.7
+  },
+  "q": {
+   "mode": "medium",
+   "step": 2,
+   "name": "Medium",
+   "aa": true,
+   "gpuTimer": false
+  }
+ },
+ "drive": {
+  "mainFrames": 7,
+  "insetRenders": 7,
+  "main": {
+   "calls": 161,
+   "tris": 223417
+  },
+  "inset": {
+   "calls": 277,
+   "tris": 358590
+  },
+  "js": {
+   "n": 7,
+   "mean": 15.37,
+   "p95": 30,
+   "max": 30
+  },
+  "q": {
+   "mode": "medium",
+   "step": 2,
+   "name": "Medium",
+   "aa": true,
+   "gpuTimer": false
+  }
+ },
+ "heapMB": [
+  60.51,
+  57.62,
+  56.98,
+  57.51
+ ],
+ "heapSlopeMBperMin": null,
+ "errors": []
+}

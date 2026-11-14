@@ -1,5 +1,68 @@
 # HANDOFF
 
+## Drive mode lag fix and auto quality (2026-11-13): state at the end
+
+**The app measures and adapts on the user's machine** (`app/js/quality.js`). Real-GPU frame rate was never measured by the build environment (software renderer only).
+
+- **F3 overlay**, off by default: fps, mean and worst frame time over the last 2 s, JS time, GPU time when the browser exposes `EXT_disjoint_timer_query_webgl2`, draw calls and triangles for the whole frame (all views and shadow passes; `renderer.info.autoReset` is off and reset once per frame), pixel ratio, quality level, shadow map size, antialiasing.
+- **Benchmark**: `/app/?bench` runs a 20 s scripted drive on the first site (after 2 s of warm-up); `/app/?bench=site` orbits Site View for 20 s. It shows a copyable summary (average fps, 1 % low fps, frame time p50/p90/p95/p99/worst, JS time, draw calls, triangles, quality reached with every change, pixel ratio, GPU name) and prints it to the console (`TERRA_BENCH`, plus `TERRA_BENCH_JSON`).
+- **Auto quality** (default): 6 steps, High, High at 1x pixels, Medium, Medium lighter, Low and Lowest.
+  - It steps down when the mean frame time over about 1 s is above 20 ms.
+  - It steps up when the work per frame (JS time, and GPU time where the timer exists, else the frame interval) stays below 12 ms for 5 s.
+  - Every change is followed by a 2.5 s hold, and a step that proves too heavy within 8 s is blocked for 30 s, then 60 s and so on.
+  - Without the GPU timer on a 60 Hz display it can lower but not raise again (frames never get under 12 ms); force High in that case.
+  - Forced setting: Auto / High / Medium / Low in the quality popover (top bar badge), saved in localStorage; `?q=high|medium|low` on the address overrides it.
+  - A notice says when the level changes.
+- **Levers per step** (`LEVELS` in quality.js), in order:
+  1. Pixel ratio: 1.5, then 1, then 0.75.
+  2. Shadow map: 2048, then 1024, then 512, with a shorter shadow distance.
+  3. Drive-mode inset: half resolution into a texture, then redrawn every 2nd frame, then only when its rover or camera moves, with inset shadows less often or never.
+  4. Terrain level-of-detail distance and fewer mirrored surround copies.
+  5. Ground shader: one texture scale, no macro variation, no normal map.
+  6. Rover parts under 3 cm hidden.
+  7. Dust reduced.
+  8. Antialiasing is only chosen when the renderer is created: off on the next load once a session needed Low.
+
+**Base cost cut**
+
+- Perseverance glass used physical transmission, which made three.js render the whole scene a second time every frame in every view; it is now plain transparency.
+- `assets/models/perseverance.glb` is simplified from 199,521 to 64,836 triangles (`gltf-transform simplify --ratio 0.25 --error 0.008`, then `meshopt --level medium`; the full model is in `_local/models_full/`).
+- Rover meshes are merged per material at load (since the previous run).
+- Terrain:
+  - A 64 m full-detail patch follows each rover (`ground.js placePatch / buildPatch`), and the tiles under it get a hole.
+  - Tiles are never finer than stride 2, so the 125 m tiles around the rover no longer cost 32,000 triangles each.
+  - The far tiles (two coarsest strides) are merged into one mesh.
+  - The real 10 km context ring is drawn at 125 m.
+- Shadows: only the rover's larger parts and the detail patch cast.
+- Drive mode: main shadow at 1024 at High.
+- Physics: fixed step, at most 240 steps per frame (unchanged).
+- The wheel contact still holds (contact_check reads the detail patch).
+
+**Ask the user**: open `/app/?bench` (and `/app/?bench=site`) on the demo laptop and send the summary.
+
+---
+
+## Wheel contact and lag fix (2026-11-13): state at the end
+
+**One height function.** `terrain.js sampleGrid` interpolates the fine height grid on the same two triangles per cell that the ground mesh draws. Everything that needs a height goes through it: the drawn mesh (identical wherever a tile is at full detail, and `ground.js` always keeps the tiles within 8 m plus two grid cells of each rover at full detail and builds them at once), the wheel contacts (`terrain.js contactSampler`: the highest point over the wheel footprint), the body plane, the HUD, the route analysis (`sim.js analyze`) and the drive physics (`drive.js`). The vertical exaggeration multiplies that one function for drawing and posing; the physics uses true heights. Keep it that way: no new height lookups that bypass `sampleGrid` / `surfaceH` / `contactSampler`.
+
+**Wheels.** `contact.js poseOnGround` (Site View playback and drive mode): body = plane through the footprint heights, lowered by the visible sinkage, vertical motion critically damped at a fixed 120 Hz step; then each wheel is moved straight up or down until the lowest of its own outer mesh vertices (grousers included) sits at the drawn ground minus the visible sinkage (sinkage clamped to 12 % of the wheel radius). A wheel may hang at most 0.4 m below rest. Plane fit with independent wheel travel; the models have no rocker or bogie nodes.
+
+**Physics at a fixed step.** `drive.js` steps at 1/120 s of simulated time, separate from drawing, at most 240 steps per drawn frame; routes, analysis and soil values are never recomputed inside the frame loop (only on a rover or slider change, debounced).
+
+**Root causes found**
+- `rovers.js:112` (`node.scale.set(kw, kr, kr)`) overwrote each wheel node's own scale. The meshopt-quantized models keep their dequantization scale on that node, so every wheel was drawn about 4 times too big and reached about 0.7 m below the ground. Now the scale is applied on top of the node's own scale.
+- `terrain.js sampleGrid` interpolated bilinearly while the mesh is drawn as two triangles per cell: up to 0.27 m difference on the coarser demo grounds. Now it uses the mesh's triangles.
+- `contact.js` smoothed each wheel's travel with a lag, and moved wheels along the tilted body axis, so wheels cut into rising ground and did not converge on steep (exaggerated) slopes. Now each wheel is solved exactly every frame against the body as drawn, moving in world vertical.
+
+**Speed changes**: rover models merged to one mesh per material at load (Perseverance about 250 meshes to under 60, Curiosity to 9; wheel nodes kept), no per-step allocation in the contact fit, shadow maps 1536 instead of 2048, drive physics step cap 240, exaggeration slider debounced 60 ms, frame-time overlay (press F or F8 in Site View or drive mode; off by default).
+
+**Tests**: `tests/contact_check.mjs` (every rover, every site, both grounds, Vertical x 1, 2, 5, 60 s scripted drive, every frame against the drawn mesh and the drawn wheel vertices; side-view screenshots `tests/previews/contact_*.png`), `tests/contact_probe.mjs` (the A1 measurement), `tests/perf_frames.mjs` (frame and JS time, draw calls, CPU profile).
+
+**Not verified here**: 60 fps and no frame above 33 ms need a real GPU; the build machine has only a software renderer (seconds per frame). JS time per frame and draw calls are measured and reported in PROGRESS.md.
+
+---
+
 ## Ground realism run (2026-11-13): state at the end
 
 **What is real now.** Jezero and Gale show their real 1 m HiRISE elevation (2 km patch at 0.98 m, real 10 km context ring at 62.5 m), cut from the two local files by `pipeline/fetch_windows.py`. Apollo 11 shows the NASA 3D Resources height map (about 115 m, relief about 5 m in the patch, fine detail synthetic and labelled). The lunar south pole and all 144 Earth hotspot grounds are still demo terrain, and no site has imagery yet. Every ground says which of these it is in a badge on its pane.
@@ -24,7 +87,7 @@ Or allow these hosts in the workspace network settings and ask for the fetch to 
 - `app/js/ground.js` (new): level-of-detail tiles of the fine grid (16 x 16 tiles on a 2049 grid, strides 1 to 32 chosen by distance, about 4 ms of building per frame, nearest first), edges stitched to the coarser neighbour so there are no cracks, the real context ring with the patch cut out, rule-based rocks near the rover (fixed seed), fading wheel tracks.
 - `app/js/contact.js` (new): one pose routine for the Site View playback and for drive mode. Wheel contacts are bilinear samples of the fine grid, the body is a plane fit through them, each wheel travels on its own to stay on the ground, the computed sinkage lowers the wheels, tracks are laid behind the rear wheels. The models have wheel nodes but no rocker or bogie nodes, so this is the plane-fit fallback, not a rocker-bogie linkage.
 - `app/js/site.js`: ground material rewritten (image drape when a site has imagery, generic photo grain near the camera, lighting and the Slope and Elevation views from a slope texture of the fine grid, so relief looks the same at every level of detail), provenance badges, sun azimuth is now a compass bearing (real sites are north-up), vertical exaggeration scales the ground instead of rebuilding it.
-- `app/js/sim.js`: the route analysis samples the fine grid (HUD tilt and slip come from the surface the wheels touch). Route planning still uses the 129 grid. `app/js/drivemode.js`: shared pose routine, level of detail follows the drive camera, driving is always at true scale. `app/js/main.js`: About rows from the provenance fields. Build id in `app/index.html` is now `20261113b`.
+- `app/js/sim.js`: the route analysis samples the fine grid (HUD tilt and slip come from the surface the wheels touch). Route planning still uses the 129 grid. `app/js/drivemode.js`: shared pose routine, level of detail follows the drive camera, driving is always at true scale. `app/js/main.js`: About rows from the provenance fields. Build id in `app/index.html` is now `20261113c` (bumped again in the wheel-contact run).
 - Scoring, the globe and the hotspot lists were not touched.
 
 **Rules to keep**

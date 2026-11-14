@@ -1,0 +1,121 @@
+{
+ "label": "final",
+ "base": "http://localhost:8765/app/index.html",
+ "windows": [
+  {
+   "name": "orbit",
+   "frameMs": {
+    "n": 13,
+    "mean": 1561.15,
+    "p95": 5419.4,
+    "max": 5419.4,
+    "over33": 4
+   },
+   "jsMs": {
+    "n": 14,
+    "mean": 10.07,
+    "p95": 62.7,
+    "max": 62.7,
+    "over33": 1
+   },
+   "drawCalls": 191,
+   "triangles": 526924,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37,
+   "heapMB": 64.8,
+   "gcMs": 49,
+   "topSelf": [
+    "15 ms  ap three-bundle.js:3682",
+    "9 ms  Ae three-bundle.js:3682",
+    "9 ms  Er three-bundle.js:3682",
+    "7 ms  getProgramInfoLog :0",
+    "6 ms  g three-bundle.js:3654",
+    "6 ms  u three-bundle.js:3473",
+    "5 ms  p three-bundle.js:3654",
+    "4 ms  frameBody site.js:619",
+    "4 ms  (anonymous) :0",
+    "4 ms  b three-bundle.js:3473",
+    "3 ms  bn three-bundle.js:3682",
+    "3 ms  clear contact.js:50"
+   ]
+  },
+  {
+   "name": "play",
+   "frameMs": {
+    "n": 3,
+    "mean": 4817,
+    "p95": 4921.9,
+    "max": 4921.9,
+    "over33": 3
+   },
+   "jsMs": {
+    "n": 4,
+    "mean": 21.35,
+    "p95": 23.2,
+    "max": 23.2,
+    "over33": 0
+   },
+   "drawCalls": 189,
+   "triangles": 526364,
+   "geometries": 354,
+   "textures": 31,
+   "programs": 37,
+   "heapMB": 64.8,
+   "gcMs": 11,
+   "topSelf": [
+    "8 ms  sampleGrid terrain.js:139",
+    "5 ms  (anonymous) site.js:524",
+    "5 ms  g three-bundle.js:3654",
+    "4 ms  Er three-bundle.js:3682",
+    "4 ms  bindVertexArray :0",
+    "4 ms  renderBufferDirect three-bundle.js:3682",
+    "4 ms  ap three-bundle.js:3682",
+    "3 ms  bn three-bundle.js:3682",
+    "2 ms  v three-bundle.js:3682",
+    "2 ms  tileGeometry ground.js:58",
+    "2 ms  x three-bundle.js:3654",
+    "2 ms  b three-bundle.js:3473"
+   ]
+  },
+  {
+   "name": "drive",
+   "frameMs": {
+    "n": 2,
+    "mean": 17235.7,
+    "p95": 17446.4,
+    "max": 17446.4,
+    "over33": 2
+   },
+   "jsMs": {
+    "n": 3,
+    "mean": 20.07,
+    "p95": 24.8,
+    "max": 24.8,
+    "over33": 0
+   },
+   "drawCalls": 180,
+   "triangles": 576066,
+   "geometries": 418,
+   "textures": 31,
+   "programs": 38,
+   "heapMB": 64.8,
+   "gcMs": 6,
+   "topSelf": [
+    "8 ms  g three-bundle.js:3654",
+    "8 ms  bindVertexArray :0",
+    "7 ms  renderOnly drivemode.js:305",
+    "6 ms  draw drivemode.js:308",
+    "6 ms  Er three-bundle.js:3682",
+    "3 ms  Is three-bundle.js:3623",
+    "3 ms  serialize :175",
+    "3 ms  drawElements :0",
+    "3 ms  uniformMatrix4fv :0",
+    "3 ms  s three-bundle.js:3682",
+    "2 ms  (anonymous) terrain.js:148",
+    "2 ms  uniform3f :0"
+   ]
+  }
+ ],
+ "errors": []
+}

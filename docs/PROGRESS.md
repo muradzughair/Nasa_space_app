@@ -160,3 +160,76 @@ Measurements (headless Chromium, software renderer, Gale target, `tests/perf_sit
 | Idle frames | 0.03 ms JS | 0.04 ms JS |
 
 Tests: `tests/ground_check.mjs` (wheel-contact heights within 0.014 m of the source on Mars, 0.09 m on Apollo 11; seams closed; provenance), `tests/motion_check.mjs` (rests on the surface, wheels on the fine grid, no popping across tiles, tracks, drive mode), `tests/previews.mjs` (screenshots in `tests/previews/`), plus smoke, physics and rover tests: all pass. Not verifiable here: real-GPU frame rate and first render under 2 s on the demo laptop.
+
+## Wheel contact and lag fix, 2026-11-13
+
+**A. Wheels under the ground.** Measured first (`tests/contact_probe.mjs`, before-fix output `tests/contact_probe_output_before_fix.txt`): the lowest wheel point was 0.5 to 1.2 m below the drawn ground on every rover and site, while the body sat on the ground. Causes and fixes:
+
+| Cause | Where | Fix |
+|---|---|---|
+| Wheel node scale overwritten; the meshopt-quantized models keep their dequantization scale on that node, so wheels were drawn about 4 times too big | `rovers.js:112` (`node.scale.set(kw, kr, kr)`) | scale applied on top of the node's own scale |
+| Physics and contacts interpolated bilinearly, the mesh draws two triangles per cell (up to 0.27 m apart on demo grounds) | `terrain.js sampleGrid` | one height function on the mesh's own triangles, used by mesh, contacts, HUD, analysis and physics |
+| Wheel travel smoothed with a lag and applied along the tilted body axis | `contact.js` | each wheel solved exactly every frame: lowest outer vertex at ground minus visible sinkage, moved in world vertical |
+| A coarser neighbour tile's stitched edge could lie under a wheel on 7.8 m demo grids | `ground.js` pin margin 8 m | tiles within 8 m plus two grid cells of a rover always at full detail |
+
+`tests/contact_check.mjs`: 4 rovers x 4 sites x 2 grounds x Vertical x 1, 2, 5, 60 s scripted drive at 60 frames per second, every frame against the drawn mesh and the drawn wheel vertices: **100 of 100 pass** (lowest point never below the clamped sinkage, never more than 5 cm above while in contact). Output `tests/contact_check_output.txt`, side views `tests/previews/contact_*.png`.
+
+**B. Lag.** `tests/perf_frames.mjs`, 1366x768, Gale target, headless Chromium with a **software renderer** (the only GPU here; it needs seconds to raster a frame, so frame rate cannot be judged here). Before = build after the ground realism run; after = this run.
+
+| 10 s window | JS per frame, mean / max (before) | after | Draw calls (before / after) | Triangles (before / after) |
+|---|---|---|---|---|
+| Orbit | 16.8 / 79 ms | 10.1 / 63 ms | 605 / 191 | 494,668 / 526,924 |
+| Play (auto route) | 41.9 / 63 ms | 21.4 / 23 ms | 603 / 189 | 494,268 / 526,364 |
+| Drive | 36.4 / 40 ms | 20.1 / 25 ms | 594 / 180 | 576,066 / 576,066 |
+
+- Displayed frame time with the software renderer: about 1.4 s (orbit), 4.4 s (play), 18 s (drive, full screen), before and after alike, because rasterising dominates there.
+- Geometries in memory 555 to 350; GC time per 10 s of driving 26 to 6 ms.
+- JS heap over 10 open and close cycles: 59.9 to 61.7 MB after (61.8 to 63.7 MB before), flat after the first open, with geometries (350) and textures (31) constant.
+- Most self time per frame, before and after: three.js scene traversal and draw submission (`projectObject`, `renderBufferDirect`) and the WebGL calls behind them (`uniformMatrix4fv`, `bindVertexArray`, `drawElements`), so the draw-call cut is what moves the JS time.
+- Done in B2 order:
+  1. Physics already ran at a fixed 120 Hz step, separate from drawing; the step cap is now 240 per frame.
+  2. Planning and analysis run only on rover or slider changes, debounced and cached per (patch, inputs); no worker was added.
+  3. No allocation per step in the contact fit.
+  4. Rover meshes are merged by material at load: Perseverance about 250 meshes down to under 60, Curiosity to 9.
+  5. Pixel ratio was already capped at 1.5, render on demand was already in place, and shadow maps are now 1536.
+  6. Terrain was already built once, with incremental level of detail.
+  7. Everything is disposed on close (memory flat).
+  8. The exaggeration slider is debounced by 60 ms.
+- Not done: worker for route planning; reduced rate for the drive inset (the canvas is not preserved between frames); the Perseverance triangle count (about 200,000; `gltf-transform simplify` only reached 160,000 and tripled the file, so it was dropped).
+- **Targets**: no memory growth is met. Steady 60 fps and no frame above 33 ms cannot be measured without a real GPU. On the CPU side every window's mean JS time is now under 22 ms, but the orbit window still had one frame of 63 ms (a level-of-detail rebuild burst), so 33 ms is not guaranteed even before the GPU's share.
+- Frame-time overlay: press F (or F8) in Site View or drive mode.
+
+## Drive mode lag fix and auto quality, 2026-11-13
+
+**Real-GPU frame rate was not measured by me**: the build environment only has a software renderer (seconds per frame). The app now measures itself on the user's machine: F3 overlay, `/app/?bench` (20 s scripted drive) and `/app/?bench=site` (20 s Site View orbit), and an automatic quality governor (see HANDOFF.md).
+
+Counts from `tests/perf_views.mjs` (renderer.info per render call, shadow passes included), Gale target, 1366x768, headless Chromium. Before = the build before this run (the build the user was running, plus the wheel fix).
+
+| View | Before | High | Medium | Low |
+|---|---|---|---|---|
+| Drive, main view: draw calls | 464 | **168** | 161 | 137 |
+| Drive, main view: triangles | 821,876 | **227,776** | 223,417 | 211,312 |
+| Drive, Earth inset: draw calls / triangles per redraw | 180 / 576,546 | 128 / 150,977 | 116 / 135,173 | 87 / 107,363 |
+| Drive, inset redraw | every frame, full resolution | every frame, half resolution | same | only when its rover or camera moves, 0.4 resolution |
+| Site View, left pane: draw calls / triangles | 647 / 669,196 | 153 / 180,716 | 153 / 180,716 | 135 / 178,898 |
+| JS per frame, drive (mean / max) | 20.3 / 40.5 ms | 9.5 / 16.8 ms | (slower run) | 9.0 / 23.9 ms |
+| JS heap over 60 s of driving | | 59.3 to 62.4 MB, small sawtooth, no growth | | |
+
+Medium and Low mostly change fill-rate costs, which these counts do not show: pixel ratio (1.5 at High, 1 at Medium, 0.75 at Low), shadow map size (2048, 1024, 512; drive main view 1024, 1024, 512), inset resolution and rate, and ground shader simplification.
+
+What cut the base cost:
+
+1. Perseverance glass used physical transmission (three.js then renders the whole opaque scene a second time each frame, in each view). It is now plain transparency.
+2. Perseverance simplified from 199,521 to 64,836 triangles.
+3. A 64 m full-detail terrain patch follows the rover, with holes in the tiles under it. Before, the four 125 m tiles around the rover were drawn at 1 m detail: 131,000 triangles, twice with shadows.
+4. Far tiles merged into one draw call (about 150 before).
+5. The 10 km context ring drawn at 125 m instead of 62.5 m.
+6. Shadow casters limited to the detail patch and rover parts larger than 12 cm.
+7. Inset drawn into a half-resolution texture.
+
+Physics was already at a fixed 120 Hz step with a cap (240 per frame); no per-step allocation.
+
+Governor checks:
+
+- `tests/quality_governor_check.mjs` uses synthetic frame sequences: slow steps down one level per 2.5 s, fast steps back up after 5 s, a too-heavy step is blocked, and 4-second frames reach Lowest.
+- `tests/bench_check.mjs` runs both benchmarks in headless Chromium, where the software renderer's very slow frames make Auto step down by itself. It also checks the F3 overlay and forcing Low from the popover.

@@ -136,3 +136,7 @@ What the Site View ground is built from, per site. "Read" means the provider's o
 | Earth hotspots | Imagery | Sentinel-2 cloudless 2017 by EOX, WMTS https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml (read), layer `s2cloudless-2017`, matrix set WGS84 | about 10 m | CC BY 4.0 (2016 and 2017 only; 2018 to 2025 are CC BY-NC-SA and are not used). Attribution in THIRD_PARTY_NOTICES.md | **Missing**: host not reachable |
 
 Other notes: the local metric grid is an azimuthal equidistant projection on the body's sphere (Mars 3,396,190 m, Moon 1,737,400 m, Earth 6,371,008.8 m), x east, z south. Rocks in Site View are rule-based and illustrative. The source list the fetcher reads is `pipeline/sites.json` (each entry has `verified: true` when its link was read from the provider's page).
+
+## Drive mode lag fix (added 2026-11-13)
+
+No downloads. `assets/models/perseverance.glb` was simplified locally from the existing model (same NASA 3D Resources source, see above) with `@gltf-transform/cli` 4.5.1 (`simplify --ratio 0.25 --error 0.008`, `meshopt --level medium`); the full 199,521-triangle model is kept in `_local/models_full/perseverance_200k.glb`.

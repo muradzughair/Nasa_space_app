@@ -1,6 +1,6 @@
 // Rover simulation core (pure logic, no 3D): A* routing, wheel-contact pose, metrics along the route, and the match verdict.
 // A screening comparison with simplified soil behaviour. Not validated against a real rover.
-import { sampleH, surfaceH } from './terrain.js';
+import { sampleH, contactSampler } from './terrain.js';
 import { SoilDrag } from './soilmech.js';
 
 const DEG = Math.PI / 180;
@@ -69,15 +69,15 @@ export function wheelPoints(r) {
   return pts;   // [forward offset, right offset]
 }
 
-/** Contact-plane fit of a rover at (x, z) with heading psi (x forward = (cos psi, sin psi) in patch coordinates). sample(x, z) returns the surface height.
+/** Contact-plane fit of a rover at (x, z) with heading psi (x forward = (cos psi, sin psi) in patch coordinates). sample(x, z, fx, fz) returns the ground height under a wheel there (terrain.js contactSampler: the shared height function over the wheel footprint).
  *  Returns the mean height c at the body centre, the slopes sa (rise over run along the heading) and sb (across, to the right), the wheel heights H and the fit residual. */
-export function contactFit(sample, x, z, psi, W) {
-  const nW = W.length, fx = Math.cos(psi), fz = Math.sin(psi), rx = fz, rz = -fx;
-  let c = 0, au = 0, bv = 0, su2 = 0, sv2 = 0; const H = [];
-  for (const [u, v] of W) { const hh = sample(x + u * fx + v * rx, z + u * fz + v * rz); H.push(hh); c += hh / nW; au += hh * u; bv += hh * v; su2 += u * u; sv2 += v * v; }
+export function contactFit(sample, x, z, psi, W, out) {   // out: optional result object to fill (no allocation in the frame loop and the physics steps)
+  const nW = W.length, fx = Math.cos(psi), fz = Math.sin(psi), rx = fz, rz = -fx, o = out || {}, H = o.H || (o.H = []);
+  let c = 0, au = 0, bv = 0, su2 = 0, sv2 = 0; H.length = nW;
+  for (let q = 0; q < nW; q++) { const u = W[q][0], v = W[q][1], hh = sample(x + u * fx + v * rx, z + u * fz + v * rz, fx, fz); H[q] = hh; c += hh / nW; au += hh * u; bv += hh * v; su2 += u * u; sv2 += v * v; }
   const sa = au / su2, sb = bv / sv2;
-  let res = 0; W.forEach(([u, v], q) => { const d = H[q] - (c + sa * u + sb * v); res += d * d; });
-  return { c, sa, sb, H, resid: Math.sqrt(res / nW), fx, fz, rx, rz };
+  let res = 0; for (let q = 0; q < nW; q++) { const d = H[q] - (c + sa * W[q][0] + sb * W[q][1]); res += d * d; }
+  o.c = c; o.sa = sa; o.sb = sb; o.resid = Math.sqrt(res / nW); o.fx = fx; o.fz = fz; o.rx = rx; o.rz = rz; return o;
 }
 
 /** Pose and metrics along a route. g in m/s2, mass in kg, mu = friction coefficient, soil = 0..1 competence (rolling resistance),
@@ -90,12 +90,13 @@ function analyzeRaw(p, route, rover, { g, mass, mu, soil, S }) {
   const N = route.length, W = wheelPoints(rover), nW = W.length;
   const A = { n: N, x: new Float32Array(N), z: new Float32Array(N), c: new Float32Array(N), nx: new Float32Array(N), ny: new Float32Array(N), nz: new Float32Array(N), psi: new Float32Array(N),
     tilt: new Float32Array(N), pitch: new Float32Array(N), roll: new Float32Array(N), slip: new Float32Array(N), e: new Float32Array(N), v: new Float32Array(N), t: new Float32Array(N), E: new Float32Array(N), s: new Float32Array(N), fwd: new Float32Array(N), resid: new Float32Array(N) };
+  const ground = contactSampler(p, rover.wheel_radius_m, rover.wheel_width_m || 0.3);
   const crr = crrFromSoil(soil), vmax = rover.max_speed_mps, lim = rover.slope_limit_deg * DEG, drag = S ? new SoilDrag({ ...rover, n_wheels: nW }, S) : null;
   const sink = new Float32Array(N), press = new Float32Array(N), blocked = new Uint8Array(N); A.sink = sink; A.press = press; A.blocked = blocked;
   for (let k = 0; k < N; k++) {
     const [x, z] = route[k], a = route[Math.max(0, k - 1)], b = route[Math.min(N - 1, k + 1)];
     const psi = Math.atan2(b[1] - a[1], b[0] - a[0]), fx = Math.cos(psi), fz = Math.sin(psi), rx = fz, rz = -fx;
-    const { c, sa, sb, resid: res } = contactFit((px, pz) => surfaceH(p, px, pz), x, z, psi, W);   // the fine height grid the wheels touch and the view draws (not the coarse planning grid)
+    const { c, sa, sb, resid: res } = contactFit(ground, x, z, psi, W);   // the shared height function over each wheel's footprint: what the view draws and the wheels touch
     const gx = sa * fx + sb * rx, gz = sa * fz + sb * rz, nl = Math.hypot(gx, 1, gz);
     const alpha = Math.atan(Math.hypot(sa, sb)), slip = Math.min(1, Math.pow(Math.tan(alpha) / mu, 2.5));
     const sinF = sa / Math.hypot(1, sa);

@@ -39,10 +39,11 @@ for (const [card, name] of [[3, 'mars_jezero'], [4, 'mars_gale']]) {
     }
     res.tracks = s.tracks.n;
     // tiles around the rover at full detail, and how far stitched edges move from the height grid
-    const cam = s.rover.root.position.clone(); cam.y += 6; s.ground.update(cam, true);
-    let near = 0, fine = 0, edge = 0;
-    for (const t of s.ground.tiles) { if (t.d > 25) continue; near++; if (t.cur === 1) fine++; const pos = t.mesh.geometry.attributes.position.array; for (let i = 0; i < pos.length; i += 3) edge = Math.max(edge, Math.abs(pos[i + 1] - g(pos[i] + half, pos[i + 2] + half))); }
-    res.near = near; res.fine = fine; res.edge = edge; res.tris = s.ground.tris;
+    const cam = s.rover.root.position.clone(); cam.y += 6; s.ground.update(cam, true, [[s.rover.root.position.x, s.rover.root.position.z]]);   // the app passes the rover position every frame
+    // the full-detail patch must cover the rover with margin, and its interior vertices must be the height grid itself
+    const G = s.ground, d = G.dp, ri = (s.rover.root.position.z + half) / U.dx - (d ? d.i0 : 0), rj = (s.rover.root.position.x + half) / U.dx - (d ? d.j0 : 0); let edge = 0;
+    if (d) { const P = G.dpMesh.geometry.attributes.position.array, m = d.n + 1; for (let a = 1; a < m - 1; a++) for (let b2 = 1; b2 < m - 1; b2++) { const k = (a * m + b2) * 3; edge = Math.max(edge, Math.abs(P[k + 1] - g(P[k] + half, P[k + 2] + half))); } }
+    res.near = d ? Math.min(ri, rj, d.n - ri, d.n - rj) * U.dx : -1; res.fine = d ? 1 : 0; res.edge = edge; res.tris = G.tris;
     const srt = [...res.hub].sort((a, b) => a - b); res.hubSpread = srt[Math.floor(srt.length * 0.975)] - srt[Math.floor(srt.length * 0.025)]; res.hubMean = srt[srt.length >> 1]; res.hubWorst = Math.max(srt[srt.length - 1] - res.hubMean, res.hubMean - srt[0]); delete res.hub;
     V.snap = true; V.awake = performance.now() + 2000; return res;
   });
@@ -51,14 +52,15 @@ for (const [card, name] of [[3, 'mars_jezero'], [4, 'mars_gale']]) {
   check(Math.abs(r.start.bodyAboveGround) < 0.005, 'rests on the surface at the start', `body plane ${(r.start.bodyAboveGround * 1000).toFixed(1)} mm from the contact plane, computed sinkage ${r.start.sinkMm.toFixed(1)} mm`);
   check(r.hubSpread < 0.06 && r.hubWorst < 0.12, 'all wheels stay on the fine height grid', `hub height above its ground point: median ${r.hubMean.toFixed(3)} m, 95 % spread ${(r.hubSpread * 1000).toFixed(0)} mm, worst ${(r.hubWorst * 1000).toFixed(0)} mm`);
   check(r.dBody < 0.03 && r.dPitch < 4, 'no popping: body height and pitch change gradually', `largest step-to-step change: body ${(r.dBody * 1000).toFixed(1)} mm against the contact plane, pitch ${r.dPitch.toFixed(2)} deg per 0.25 m`);
-  check(r.fine === r.near && r.near > 0 && r.edge < 0.25, 'tiles under the rover are at full detail and stitched edges stay on the grid', `${r.fine} of ${r.near} tiles within 25 m at 1:1, largest edge offset ${(r.edge * 1000).toFixed(0)} mm, ${r.tris} triangles`);
+  check(r.fine === 1 && r.near > 8 && r.edge < 1e-4, 'the full-detail patch covers the rover and its interior is the height grid itself', `rover ${r.near.toFixed(1)} m inside the patch edge, largest interior offset ${(r.edge * 1000).toFixed(2)} mm, ${r.tris} triangles in the ground`);
   check(r.tracks > 100, 'wheel tracks are laid', `${r.tracks} track samples, sinkage up to ${r.sinkMax.toFixed(1)} mm`);
   // drive mode: enter, drive, rover-camera screenshot, exit
   await page.evaluate(() => document.getElementById('driveBtn').click()); await page.waitForSelector('#driveChooser:not(.hidden)', { timeout: 60000 });
   await page.evaluate(() => document.querySelector('#dcCards .dc-pick:nth-child(1)').click());
   await page.waitForFunction(() => window.TERRA_DRIVE && window.TERRA_DRIVE.active, null, { timeout: 90000 });
   const d = await page.evaluate(async () => { const M = TERRA_DRIVE, s = M.sims[0], y0 = TERRA_SITE.sides[0].rover.root.position.y; for (let i = 0; i < 6000; i++) s.step({ throttle: 1, steer: i > 3000 ? 0.3 : 0, brake: 0 }, 1 / 60); return { dist: s.dist, pitch: s.readout().pitch, sink: s.readout().sinkMm, y0 }; });
-  await page.waitForTimeout(9000);
+  const fn0 = await page.evaluate(() => TERRA_DRIVE.frameN || 0);   // the pose is smoothed per drawn frame: wait for two frames after the scripted drive
+  await page.waitForFunction(n => (TERRA_DRIVE.frameN || 0) >= n + 2, fn0, { timeout: 180000 }).catch(() => {}); await page.waitForTimeout(500);
   const d2 = await page.evaluate(() => { const s = TERRA_SITE.sides[0], M = TERRA_DRIVE; return { tr: s.tracks.n, lod: s.ground.tiles.filter(t => t.cur === 1).length, y: s.rover.root.position.y, c: M.sims[0].fit.c, sink: M.sims[0].drag ? M.sims[0].drag.z : 0 }; });
   check(d.dist > 1 && Math.abs(d2.y - (d2.c - d2.sink)) < 0.05, 'drive mode: the rover drives and sits on the fine grid', `${d.dist.toFixed(1)} m driven, pitch ${d.pitch.toFixed(1)} deg, sinkage ${d.sink.toFixed(1)} mm, body ${((d2.y - (d2.c - d2.sink)) * 1000).toFixed(0)} mm from the contact plane, ${d2.lod} tiles at 1:1`);
   await page.screenshot({ path: new URL(`./previews/${name}_drive.png`, import.meta.url).pathname, timeout: 180000 });

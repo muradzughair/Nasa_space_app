@@ -1,0 +1,109 @@
+{
+ "label": "wheelfix",
+ "bytesAtLoad": 9814578,
+ "requestsAtLoad": 20,
+ "clickToOpenMs": 14265,
+ "openSiteMs": 2065,
+ "bytesAfterOpen": 23367223,
+ "requestsAfterOpen": 60,
+ "idle": {
+  "gapMs": {
+   "n": 600,
+   "mean": 16.67,
+   "p95": 16.8,
+   "max": 16.8
+  },
+  "callbackMs": {
+   "n": 601,
+   "mean": 0.03,
+   "p95": 0.1,
+   "max": 0.2
+  }
+ },
+ "orbit": {
+  "gapMs": {
+   "n": 10,
+   "mean": 1326.62,
+   "p95": 5216.4,
+   "max": 5216.4
+  },
+  "callbackMs": {
+   "n": 11,
+   "mean": 8.08,
+   "p95": 37.5,
+   "max": 37.5
+  },
+  "drawCallsPerFrame": 191,
+  "trianglesPerFrame": 526924
+ },
+ "dpr": 1,
+ "memory": [
+  {
+   "heapMB": 59.9,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 60.9,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.3,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.2,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.5,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.5,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.7,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.7,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.8,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.7,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  },
+  {
+   "heapMB": 61.7,
+   "geometries": 350,
+   "textures": 31,
+   "programs": 37
+  }
+ ],
+ "errors": []
+}
