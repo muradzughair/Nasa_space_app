@@ -158,6 +158,12 @@
 .rsim .site.s-col .site-side .panel-body, .rsim .site.s-col .site-side .ph-title { display: none; }
 .rsim .site.s-col .site-side .panel-head { justify-content: center; padding: 10px 0; }
 .rsim .site.s-col #collapseSide svg { transform: rotate(180deg); }
+.rsim #collapseSide svg { transition: transform var(--dur); }
+.rsim .site.s-col .site-side .panel-head .info-btn { display: none; }
+.rsim .site.s-col .site-side { cursor: default; }
+.rsim .side-toggle { flex: none; width: 28px; height: 28px; color: var(--text); border-color: var(--line2); }
+.rsim .side-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.rsim .side-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .rsim .site-side .panel-body { padding: var(--s4); }
 .rsim .vp-wrap { min-height: 0; display: flex; flex-direction: column; background: #05070b; min-width: 0; }
 .rsim .vp-stage { position: relative; flex: 1; min-height: 120px; overflow: hidden; }

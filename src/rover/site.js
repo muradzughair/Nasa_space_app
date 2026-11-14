@@ -102,8 +102,8 @@ export const TEMPLATE = `
       </div>
     </div>
     <aside class="site-side" id="siteSide" aria-label="Ground and simulation details">
-      <div class="panel-head"><span class="ph-title">Ground and simulation details</span>${info("This is a quick estimate, not an exact rover simulation. The soil is kept simple, so treat the results as a first check.", "About this simulation")}</div>
-      <div class="panel-body">
+      <div class="panel-head"><button id="collapseSide" class="icon-btn side-toggle" type="button" aria-controls="siteSideBody" aria-expanded="true" aria-label="Close the details panel"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M4 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span class="ph-title">Ground and simulation details</span>${info("This is a quick estimate, not an exact rover simulation. The soil is kept simple, so treat the results as a first check.", "About this simulation")}</div>
+      <div class="panel-body" id="siteSideBody">
       <section id="simScore" class="sim-score hidden" aria-live="polite"></section>
       <section>
         <h3>This ground ${info("Heights come from satellite elevation data, with points about 30 m apart. Smaller bumps are filled in smoothly by the app.", "About this ground")}</h3>
@@ -197,7 +197,13 @@ function ensureRenderer() {
   $('restartBtn').onclick = () => { V.u = 0; V.snap = true; V.shown = false; play(true); };
   $('scrub').oninput = () => { V.u = +$('scrub').value / 1000; V.snap = true; };
   $('vpVerdictClose').onclick = () => $('vpVerdict').classList.add('hidden');
-  $('vpVerdictMore').onclick = () => $('verdict').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  $('vpVerdictMore').onclick = () => {
+    // With the details panel closed, open it first and scroll once it has grown back.
+    const closed = sideClosed();
+    if (closed) setSide(false);
+    setTimeout(() => $('verdict').scrollIntoView({ block: 'nearest', behavior: 'smooth' }), closed ? 320 * motion.scale + 30 : 0);
+  };
+  $('collapseSide').onclick = () => setSide(!sideClosed());
   V.ready = true; V.wake = wake;
   qAttach(V.renderer, applyQuality);
   qControl($('gfxPop'));   // graphics quality: Auto / High / Medium / Low (quality.js)
@@ -205,6 +211,23 @@ function ensureRenderer() {
     b.onclick = e => { e.stopPropagation(); show(pop.classList.contains('hidden')); };
     const away = e => { if (!pop.contains(e.target) && e.target !== b) show(false); }; document.addEventListener('click', away); V.off.push(() => document.removeEventListener('click', away)); }
 }
+// ---------------------------------------------------------------- the details panel on the right: open or closed (a thin strip), kept between visits
+const SIDE_KEY = 'rsim.side.closed';
+const sideClosed = () => !!$('site') && $('site').classList.contains('s-col');
+function readSide() { try { return localStorage.getItem(SIDE_KEY) === '1'; } catch (e) { return false; } }
+/** Closes (true) or opens the details panel. The 3D view takes the freed width: the ResizeObserver on #vpStage resizes the canvas, and each pane's
+ *  camera gets its new aspect in frameDraw, so nothing is stretched and both cameras keep their position. Nothing else is touched. */
+function setSide(closed, remember = true) {
+  const site = $('site'), b = $('collapseSide'); if (!site || !b) return;
+  site.classList.toggle('s-col', closed);
+  b.setAttribute('aria-expanded', closed ? 'false' : 'true');
+  b.setAttribute('aria-label', closed ? 'Open the details panel' : 'Close the details panel');
+  b.title = closed ? 'Open the details panel' : 'Close the details panel';
+  if (closed && $('siteSideBody').contains(document.activeElement)) b.focus();
+  if (remember) { try { localStorage.setItem(SIDE_KEY, closed ? '1' : '0'); } catch (e) { /* storage unavailable: lasts for this visit */ } }
+  wake(1200);   // keep drawing through the width animation
+}
+
 /** Push a quality level (quality.js) into the renderer and both grounds. Cheap enough to call at any moment; a new shadow map size frees the old map. */
 function applyQuality(L) {
   V.q = L; const hq = new URLSearchParams(location.search).has('hq');
@@ -487,6 +510,7 @@ export async function openSite({ host, ctx, patch, imagery, targetGround, onBack
   V = fresh(); V.host = host; V.ctx = ctx; V.patch = patch; V.imagery = imagery; V.onBack = onBack;
   V.tg = targetGround || null; V.gmode = V.tg ? 'compare' : 'earth';   // the target's own ground beside the Earth place is the default view
   host.insertAdjacentHTML('beforeend', TEMPLATE);
+  setSide(readSide(), false);   // the panel opens as it was left, before the first frame
   motion.scale = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.05 : 1;
   V.gl = !!guard('the 3D renderer', null, () => { ensureRenderer(); return true; });
   guard('the rover registry', null, () => { initRovers(D.rovers, ctx.target.body); });
