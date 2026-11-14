@@ -245,6 +245,28 @@ export function paintHeatmap(grid: Grid, cells: CellScores, threshold: number): 
       pixels[at + 3] = BELOW[3];
     }
   }
+  // Sea and empty pixels take the colour of the nearest land (they stay fully transparent), so the globe's linear filtering fades coasts
+  // out instead of blending them towards black. A few passes cover the reach of the filter.
+  for (let pass = 0; pass < 3; pass++) {
+    const src = pixels.slice();
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const at = (y * cols + x) * 4;
+        if (src[at + 3] !== 0 || (src[at] | src[at + 1] | src[at + 2]) !== 0) continue;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= rows) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const k = (yy * cols + ((x + dx + cols) % cols)) * 4;
+            if (src[k + 3] === 0 && (src[k] | src[k + 1] | src[k + 2]) === 0) continue;
+            r += src[k]; g += src[k + 1]; b += src[k + 2]; n++;
+          }
+        }
+        if (n) { pixels[at] = r / n; pixels[at + 1] = g / n; pixels[at + 2] = b / n; }
+      }
+    }
+  }
   context.putImageData(image, 0, 0);
   return canvas;
 }

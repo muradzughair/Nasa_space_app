@@ -6,6 +6,7 @@ import { paintPremadeMarks, PREMADE_VIDEO_TOP_PERCENT, premadeVideoCells, target
 import {
   belowCss,
   cachedCellScores,
+  cellCentre,
   type CellScores,
   computeCellScores,
   distribution,
@@ -125,7 +126,10 @@ export function HeatmapLayer({ globe }: { globe: GlobeController | null }) {
   useLayoutEffect(() => {
     if (!globe) return;
     try {
-      globe.setPremadeMarks(marks?.canvas ?? null);
+      globe.setPremadeMarks(marks?.canvas ?? null, marks && grid ? marks.cells.map((i) => {
+        const c = cellCentre(grid, i), h = grid.header.cellDegrees / 2;
+        return { west: c.lon - h, south: c.lat - h, east: c.lon + h, north: c.lat + h };
+      }) : []);
     } catch {
       /* destroyed */
     }

@@ -92,7 +92,7 @@ const K = 4;
  * marked cell (the inside stays transparent, so the cell keeps its heatmap
  * colour). Same layout as the heatmap picture, K pixels per cell.
  */
-export function paintPremadeMarks(grid: Grid, cells: CellScores, profile: Profile): { canvas: HTMLCanvasElement; count: number } | null {
+export function paintPremadeMarks(grid: Grid, cells: CellScores, profile: Profile): { canvas: HTMLCanvasElement; count: number; cells: number[] } | null {
   if (cells.key !== profileKey(profile)) return null;
   const { cols, rows } = grid.header;
   const marked = premadeVideoCells(cells);
@@ -111,7 +111,7 @@ export function paintPremadeMarks(grid: Grid, cells: CellScores, profile: Profil
     }
   }
   g.putImageData(image, 0, 0);
-  return { canvas, count: marked.length };
+  return { canvas, count: marked.length, cells: marked };
 }
 
 export { cellCentre };

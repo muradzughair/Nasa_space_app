@@ -15,11 +15,17 @@ import {
   Cartesian3,
   Cartographic,
   CesiumWidget,
+  ColorGeometryInstanceAttribute,
+  GeometryInstance,
+  GroundPolylineGeometry,
+  GroundPolylinePrimitive,
+  PolylineColorAppearance,
   Color,
   EasingFunction,
   Ellipsoid,
   EllipsoidalOccluder,
   type Entity,
+  ArcType,
   type Billboard,
   BillboardCollection,
   HeightReference,
@@ -156,6 +162,10 @@ export class GlobeController {
   private labelLayer: ImageryLayer | null = null;
   private overlayLayer: ImageryLayer | null = null;
   private heatmapLayer: ImageryLayer | null = null;
+  /** Heatmap opacity chosen with the slider; the layer is drawn more see-through as the camera comes down (applyZoomLook). */
+  private heatmapAlpha = 0.8;
+  /** Thin outlines of the rover-video cells for close views, drawn on the ground at a constant pixel width. */
+  private marksLines: GroundPolylinePrimitive | null = null;
   /** Outlines of the cells where pre-made rover videos are planned, drawn over the heatmap. */
   private marksLayer: ImageryLayer | null = null;
   private clickHandler: ((lat: number, lon: number) => void) | null = null;
@@ -350,6 +360,7 @@ export class GlobeController {
     this.cleanup.push(viewer.clock.onTick.addEventListener(() => this.onTick()));
     this.cleanup.push(scene.postRender.addEventListener(() => this.onPostRender()));
     this.cleanup.push(scene.preRender.addEventListener(() => this.updateHotspots()));
+    this.cleanup.push(scene.preRender.addEventListener(() => this.applyZoomLook()));
 
     let ready = false;
     const markReady = () => {
@@ -523,12 +534,14 @@ export class GlobeController {
     const { imageryLayers } = this.viewer;
     const previous = this.heatmapLayer;
     let next: ImageryLayer | null = null;
+    this.heatmapAlpha = alpha;
     if (image && this.planet.earthServices) {
-      // Nearest-neighbour both ways: one pixel is one grid cell and must look like one, with no blending into the sea.
+      // Linear filtering: neighbouring cells blend into a soft field up close instead of hard squares (paintHeatmap gives sea pixels the
+      // colour of the nearest land, fully transparent, so coasts fade out instead of darkening). The values of the cells are not changed.
       next = new ImageryLayer(new CanvasImageryProvider(image), {
-        alpha,
-        magnificationFilter: TextureMagnificationFilter.NEAREST,
-        minificationFilter: TextureMinificationFilter.NEAREST,
+        alpha: alpha * this.zoomFade(),
+        magnificationFilter: TextureMagnificationFilter.LINEAR,
+        minificationFilter: TextureMinificationFilter.LINEAR,
       });
       imageryLayers.add(next, this.labelLayer ? imageryLayers.indexOf(this.labelLayer) : imageryLayers.length);
     }
@@ -545,8 +558,32 @@ export class GlobeController {
    * (analog/premade.ts): a picture at four pixels per cell, transparent
    * except for the outlines, above the heatmap. Null removes it.
    */
-  setPremadeMarks(image: HTMLCanvasElement | null): void {
+  setPremadeMarks(image: HTMLCanvasElement | null, cells: { west: number; south: number; east: number; north: number }[] = []): void {
     const { imageryLayers } = this.viewer;
+    if (this.marksLines) {
+      this.viewer.scene.primitives.remove(this.marksLines);
+      this.marksLines = null;
+    }
+    if (image && cells.length && this.planet.earthServices && GroundPolylinePrimitive.isSupported(this.viewer.scene)) {
+      const color = ColorGeometryInstanceAttribute.fromColor(Color.WHITE.withAlpha(0.9));
+      this.marksLines = this.viewer.scene.primitives.add(
+        new GroundPolylinePrimitive({
+          geometryInstances: cells.map(
+            (c) =>
+              new GeometryInstance({
+                geometry: new GroundPolylineGeometry({
+                  positions: Cartesian3.fromDegreesArray([c.west, c.south, c.east, c.south, c.east, c.north, c.west, c.north, c.west, c.south]),
+                  width: 1.5,
+                  arcType: ArcType.RHUMB,
+                }),
+                attributes: { color },
+              }),
+          ),
+          appearance: new PolylineColorAppearance(),
+          asynchronous: true,
+        }),
+      ) as GroundPolylinePrimitive;
+    }
     const previous = this.marksLayer;
     let next: ImageryLayer | null = null;
     if (image && this.planet.earthServices) {
@@ -569,8 +606,29 @@ export class GlobeController {
   }
 
   setHeatmapOpacity(alpha: number): void {
-    if (this.heatmapLayer) this.heatmapLayer.alpha = alpha;
+    this.heatmapAlpha = alpha;
+    this.applyZoomLook();
     this.viewer.scene.requestRender();
+  }
+
+  /** 1 from far away, down to 0.45 close to the ground: the heatmap lets the satellite ground show through as you zoom in. */
+  private zoomFade(): number {
+    const height = this.viewer.camera.positionCartographic.height;
+    return 0.45 + 0.55 * clamp((height - 150_000) / (3_000_000 - 150_000), 0, 1);
+  }
+
+  /**
+   * The heatmap's look by camera height, before each frame is drawn: its
+   * opacity fades as you come down, and the rover-video outlines switch from
+   * the cell picture (fine from far away) to thin lines on the ground (which
+   * stay thin however close you are).
+   */
+  private applyZoomLook(): void {
+    if (this.heatmapLayer) this.heatmapLayer.alpha = this.heatmapAlpha * this.zoomFade();
+    const near = this.viewer.camera.positionCartographic.height < 2_500_000;
+    const lines = !!this.marksLines && near && !this.walkthrough;
+    if (this.marksLayer) this.marksLayer.alpha = lines ? 0 : 1;
+    if (this.marksLines) this.marksLines.show = lines;
   }
 
   /**
