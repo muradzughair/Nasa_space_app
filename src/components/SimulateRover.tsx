@@ -21,11 +21,19 @@ interface Props {
  * "Simulate a rover here": opens the rover simulator (src/rover, a separate
  * chunk loaded only now) on the real ground around this exact point. The
  * globe stops drawing underneath it and is shown again, as it was, on exit.
+ * Render it as the last child of a card: it docks to the card's bottom edge
+ * (position: sticky), so it is visible without scrolling however long the
+ * card is.
  */
 export function SimulateRover({ globe, place, profile, water, similarity }: Props) {
   const imagery = useStore((s) => s.activeImagery ?? s.settings.imagery);
   const [busy, setBusy] = useState(false);
-  if (water) return <p className="cell-note">Open water: there is no ground here for a rover, so this point cannot be simulated.</p>;
+  if (water)
+    return (
+      <div className="rover-sim-dock">
+        <p className="rover-sim-water">Open water: there is no ground here for a rover, so this point cannot be simulated.</p>
+      </div>
+    );
   const start = async () => {
     setBusy(true);
     globe?.setPaused(true);
@@ -55,14 +63,23 @@ export function SimulateRover({ globe, place, profile, water, similarity }: Prop
     }
   };
   return (
-    <div className="rover-sim with-info">
-      <button type="button" className="card-action rover-sim-button" disabled={busy} onClick={() => void start()}>
-        {busy ? "Rover simulation open…" : "Simulate a rover here"}
-      </button>
-      <InfoTip
-        label="About the rover simulation"
-        text="Opens a 3D view of the real ground around this point, where a rover can drive across it. It downloads about 3 to 10 MB."
-      />
+    <div className="rover-sim-dock">
+      <div className="rover-sim with-info">
+        <button type="button" className="rover-sim-button" disabled={busy} onClick={() => void start()}>
+          <svg viewBox="0 0 20 16" width="18" height="15" aria-hidden="true">
+            <path d="M3 9h14l-1.6-4.2A1.5 1.5 0 0 0 14 3.8H6a1.5 1.5 0 0 0-1.4 1L3 9z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+            <path d="M2 9h16v2.5H2z" fill="currentColor" />
+            <circle cx="5" cy="13.2" r="2" fill="currentColor" />
+            <circle cx="10" cy="13.2" r="2" fill="currentColor" />
+            <circle cx="15" cy="13.2" r="2" fill="currentColor" />
+          </svg>
+          <span>{busy ? "Rover simulation open…" : "Simulate a rover here"}</span>
+        </button>
+        <InfoTip
+          label="About the rover simulation"
+          text="Opens a 3D view of the real ground around this point, where a rover can drive across it. It downloads about 3 to 10 MB."
+        />
+      </div>
     </div>
   );
 }

@@ -112,8 +112,6 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
 
       <Comparison data={data} profile={profile} evaluation={evaluation} label={site.name.split(",")[0]} pressure={measures.pressure} />
 
-      {planet === "earth" && <SimulateRover globe={globe} place={{ name: site.name, lat: site.lat, lon: site.lon, kind: "curated-site" }} profile={profile} similarity={evaluation.overall} />}
-
       <div className="atlas-actions">
         <button type="button" className={`card-action${onTarget ? " is-primary" : ""}`} onClick={flySite}>
           Fly to this site
@@ -147,6 +145,9 @@ function SiteScores({ globe, data, site, grid }: Props & { grid: Grid }) {
           ...sourcesOf(data, profile),
         ]}
       />
+
+      {/* Last, so it docks to the bottom edge of the card and needs no scrolling. */}
+      {planet === "earth" && <SimulateRover globe={globe} place={{ name: site.name, lat: site.lat, lon: site.lon, kind: "curated-site" }} profile={profile} similarity={evaluation.overall} />}
     </>
   );
 }

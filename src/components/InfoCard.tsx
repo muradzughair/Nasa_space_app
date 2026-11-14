@@ -122,6 +122,13 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
           <CellComparison key={selection.id} globe={globe} data={data} grid={grid} selection={selection} atlas={atlas} />
         ))}
 
+      {planet === "moon" && <MoonTargetAction key={selection.id} selection={selection} />}
+
+      <button type="button" className="card-action" onClick={() => globe?.zoomToSelection()}>
+        Zoom closer
+      </button>
+
+      {/* Last, so it docks to the bottom edge of the card and needs no scrolling. */}
       {onEarth && (
         <SimulateRover
           globe={globe}
@@ -131,12 +138,6 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
           similarity={spotScore}
         />
       )}
-
-      {planet === "moon" && <MoonTargetAction key={selection.id} selection={selection} />}
-
-      <button type="button" className="card-action" onClick={() => globe?.zoomToSelection()}>
-        Zoom closer
-      </button>
     </aside>
   );
 }
