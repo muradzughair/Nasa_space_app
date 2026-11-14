@@ -71,6 +71,11 @@ export async function enterVR(xr = navigator.xr) {
   S = { session, floor, saved: { exag: V.exag }, side: clamp(H.startSide(), 0, V.sides.length - 1), mode: 'stand', last: performance.now(), panelT: 0, force: true, hands: {}, prev: {}, held: false, aim: false, hover: null, objs: [] };
   V.vr = S; cancelAnimationFrame(V.raf);   // site.js's loop stands still while V.vr is set
   { const dc = document.getElementById && document.getElementById('driveChooser'); if (dc) dc.classList.add('hidden'); }   // VR and Drive mode never run together
+  // An emulator (Immersive Web Emulator / IWER) shows the session by moving the canvas into its own full-window layer at z-index 999: the simulation's
+  // root (z-index 1000) steps just below it while in VR. And it puts the canvas back at the end of its parent on exit, above the panes that take the
+  // mouse: remember where it was, so restore() puts it back in place.
+  S.root = H.slot() && H.slot().closest('.rsim'); if (S.root) S.root.classList.add('in-vr');
+  const cv = R.domElement; S.canvasHome = cv && cv.parentNode ? { cv, parent: cv.parentNode, next: cv.nextSibling } : null;
   try {
     if (V.exag !== 1) H.setExag(1);        // real scale: 1 unit = 1 m, true rover size, no vertical exaggeration
     build(V, R);
@@ -100,16 +105,21 @@ function restore() {
   st.panel && st.panel.dispose(); st.label && st.label.dispose(); st.menu && st.menu.dispose(); st.card && st.card.dispose();
   st.disposables.forEach(d => d.dispose());
   if (V.exag !== st.saved.exag) H.setExag(st.saved.exag);
+  if (st.root) st.root.classList.remove('in-vr');
+  const home = () => { const h = st.canvasHome; if (h && h.parent.isConnected && (h.cv.parentNode !== h.parent || h.cv.nextSibling !== h.next)) { h.parent.insertBefore(h.cv, h.next && h.next.parentNode === h.parent ? h.next : null); H.resume(); } };
+  home(); setTimeout(home, 60);   // the emulator may hand the canvas back after the session's end event
   note(false);
   H.resume();   // scissor, canvas size, shadows (applySide), the normal requestAnimationFrame loop
 }
 /** A line in the 2D page while the headset is in use. */
 function note(on) {
   const site = H.slot() && H.slot().closest('#site'); if (!site) return;
-  let n = site.querySelector('#vrNote');
-  if (!on) { if (n) n.remove(); return; }
-  // covers the whole 2D page while the headset is in use, so nothing behind it (Drive, Play, the panels) can be started on top of the VR session
-  if (!n) { site.insertAdjacentHTML('beforeend', '<div id="vrNote" class="vr-cover" role="dialog" aria-modal="true" aria-label="Viewing in VR"><div class="vr-note"><span>Viewing in VR</span><button class="btn small" id="vrExit">Exit VR</button></div></div>'); n = site.querySelector('#vrNote'); n.querySelector('#vrExit').onclick = () => exitVR(); }
+  let n = site.querySelector('#vrNote'), pill = document.body && document.getElementById('vrPill');
+  if (!on) { if (n) n.remove(); if (pill) pill.remove(); return; }
+  // a cover over the whole 2D page while the headset is in use, so nothing behind it (Drive, Play, the panels) can be started on top of the VR session
+  if (!n) site.insertAdjacentHTML('beforeend', '<div id="vrNote" class="vr-cover" aria-hidden="true"></div>');
+  // the "Viewing in VR / Exit VR" line sits on the page itself, above everything, so it stays usable even under an emulator's full-window layer
+  if (document.body && !pill) { document.body.insertAdjacentHTML('beforeend', '<div id="vrPill" class="vr-pill" role="status"><span>Viewing in VR</span><button type="button" id="vrExit">Exit VR</button></div>'); document.getElementById('vrExit').onclick = () => exitVR(); }
 }
 
 // ---------------------------------------------------------------- the VR objects: rig (camera and controllers), panels, teleport arc, slip rings

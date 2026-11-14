@@ -499,5 +499,9 @@
 .rsim .vr-slot + .gfx-wrap { margin-left: var(--s2); }
 .rsim .vr-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .rsim .vr-btn:hover { background: rgba(45,212,191,.12); }
-.rsim .vr-cover { position: absolute; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(4,7,12,.55); }
-.rsim .vr-note { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: rgba(8,12,19,.9); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--text); font-weight: 600; box-shadow: 0 12px 40px rgba(0,0,0,.55); }
+.rsim .vr-cover { position: absolute; inset: 0; z-index: 90; background: rgba(4,7,12,.55); }
+.rsim.in-vr { z-index: 998; }   /* just below an emulator's full-window layer (Immersive Web Emulator: 999) */
+/* "Viewing in VR" line: on <body>, above the simulation and above an emulator's layer (outside .rsim, so it carries its own colours) */
+.vr-pill { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; background: rgba(8,12,19,.92); border: 1px solid #2dd4bf; border-radius: 999px; color: #e8eef7; font: 600 14px "Inter Variable", "Inter", system-ui, sans-serif; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+.vr-pill button { font: inherit; font-size: 13px; color: #e8eef7; background: transparent; border: 1px solid #2f4260; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.vr-pill button:hover { border-color: #2dd4bf; color: #2dd4bf; }

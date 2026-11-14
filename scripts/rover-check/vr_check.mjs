@@ -57,12 +57,18 @@ const cams = sides.map((s, i) => { const camera = new THREE.PerspectiveCamera(50
 // ---- mocked WebXR: renderer.xr, the session, two controllers with xr-standard gamepads
 const listeners = {}, session = { enabledFeatures: ['local-floor'], inputSources: [],
   addEventListener(t, f) { (listeners[t] ||= []).push(f); }, removeEventListener(t, f) { listeners[t] = (listeners[t] || []).filter(x => x !== f); },
-  requestReferenceSpace: async () => ({}), end: async () => { renderer.xr.isPresenting = false; (listeners.end || []).slice().forEach(f => f({})); } };
+  requestReferenceSpace: async () => ({}), end: async () => { renderer.xr.isPresenting = false; (listeners.end || []).slice().forEach(f => f({})); stage.appendChild(canvasEl); } };
 const pad = () => ({ buttons: Array.from({ length: 7 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] });
 const ctrls = [new THREE.Group(), new THREE.Group()], grips = [new THREE.Group(), new THREE.Group()], pads = { left: pad(), right: pad() };
-const renderer = { loop: null, scissor: true, rendered: [],
+// a tiny DOM for the canvas: #vpStage holds the canvas first, then the two panes that take the mouse; an emulator (IWER) moves the canvas into its
+// own full-window layer when the session starts and appends it back at the end of the stage when it ends
+const node = (name) => ({ name, parentNode: null, get nextSibling() { const p = this.parentNode; if (!p) return null; const i = p.kids.indexOf(this); return p.kids[i + 1] || null; } });
+const stage = { kids: [], isConnected: true, insertBefore(c, n) { if (c.parentNode) c.parentNode.kids.splice(c.parentNode.kids.indexOf(c), 1); const i = n ? this.kids.indexOf(n) : -1; if (i < 0) this.kids.push(c); else this.kids.splice(i, 0, c); c.parentNode = this; }, appendChild(c) { this.insertBefore(c, null); } };
+const emuLayer = { kids: [], isConnected: true, insertBefore: stage.insertBefore, appendChild(c) { this.insertBefore(c, null); } };
+const canvasEl = node('canvas'); [canvasEl, node('paneL'), node('paneR')].forEach(c => stage.appendChild(c));
+const renderer = { loop: null, scissor: true, rendered: [], domElement: canvasEl,
   xr: { enabled: false, isPresenting: false, ref: null, setReferenceSpaceType(t) { this.ref = t; }, setFoveation() {}, getController: i => ctrls[i], getControllerGrip: i => grips[i],
-    setSession: async s => { renderer.xr.session = s; renderer.xr.isPresenting = true; ctrls.forEach((c, i) => c.dispatchEvent({ type: 'connected', data: { handedness: i ? 'right' : 'left', gamepad: i ? pads.right : pads.left } })); } },
+    setSession: async s => { renderer.xr.session = s; renderer.xr.isPresenting = true; emuLayer.appendChild(canvasEl); ctrls.forEach((c, i) => c.dispatchEvent({ type: 'connected', data: { handedness: i ? 'right' : 'left', gamepad: i ? pads.right : pads.left } })); } },
   setAnimationLoop(fn) { this.loop = fn; }, setScissorTest(b) { this.scissor = b; }, render(scene, cam) { this.rendered.push({ scene, cam }); } };
 const xr = { isSessionSupported: async m => m === 'immersive-vr', requestSession: async () => session };
 
@@ -70,7 +76,7 @@ const xr = { isSessionSupported: async m => m === 'immersive-vr', requestSession
 const V = { open: true, drive: null, sides, cams, runs: { A: [A0, A1] }, u: 0.3, playing: false, speed: 1, exag: 2.5, renderer, raf: 7, vr: null, sunV: new THREE.Vector3(0.3, 0.8, 0.2).normalize(), layout: 'two panes' };
 const calls = { exag: [], resume: 0, togglePlay: 0, restart: 0 };
 const slot = fakeEl({ querySelector: sel => (sel === '#vrBtn' ? slot.btn : null), closest: () => site, btn: { onclick: null } });
-const site = fakeEl({ querySelector: () => site.noteEl, insertAdjacentHTML(_, html) { site.noteEl = fakeEl({ html, remove() { site.noteEl = null; }, querySelector: () => ({ onclick: null }) }); }, noteEl: null });
+const site = fakeEl({ cls: new Set(), classList: { add: c => site.cls.add(c), remove: c => site.cls.delete(c), toggle() {}, contains: c => site.cls.has(c) }, querySelector: () => site.noteEl, insertAdjacentHTML(_, html) { site.noteEl = fakeEl({ html, remove() { site.noteEl = null; }, querySelector: () => ({ onclick: null }) }); }, noteEl: null });
 const applySide = s => { s.sun.shadow.mapSize.set(2048, 2048); };
 const hooks = { get V() { return V; }, slot: () => slot, siteNote: m => log('note: ' + m),
   advancePlayback: dt => { if (V.playing) V.u = Math.min(1, V.u + dt * V.speed / 75); sides.forEach((s, i) => { const A = V.runs.A[i], k = Math.round(V.u * (A.n - 1)); s.rover.root.position.set(A.x[k] - half, 3, A.z[k] - half); s.rover.root.rotation.y = -A.psi[k]; s.rover.root.updateMatrixWorld(true); }); },
@@ -95,6 +101,7 @@ const st = () => VR.vrState(), step = (n = 1) => { for (let k = 0; k < n; k++) r
 check(ok && V.vr && renderer.xr.enabled && renderer.xr.isPresenting && typeof renderer.loop === 'function', 'enter VR: renderer.xr presents and drawing runs through renderer.setAnimationLoop');
 check(V.exag === 1 && calls.exag[0] === 1, 'in VR the vertical exaggeration is 1 (real scale)', `exag ${V.exag}`);
 check(renderer.scissor === false, 'in VR the two-pane scissor is off');
+check(site.cls.has('in-vr'), 'in VR the simulation steps below an emulator\'s full-window layer (in-vr class)');
 check(sides.every(s => s.sun.shadow.mapSize.x === Q.vrLevel().shadow) && Q.vrLevel().shadow <= 1024, 'in VR the shadow map follows the vr profile', `${sides[0].sun.shadow.mapSize.x} px`);
 check(renderer.xr.ref === 'local-floor', 'reference space: local-floor (standing, floor at the ground)');
 step(3);
@@ -144,9 +151,12 @@ check(!V.vr && !VR.vrState() && renderer.loop === null && renderer.xr.enabled ==
 check(!inScene, 'exit VR: the VR objects have left both scenes');
 check(V.exag === 2.5 && calls.exag[calls.exag.length - 1] === 2.5, 'exit VR: the vertical exaggeration is restored', `${V.exag}`);
 check(cams.every((c, i) => JSON.stringify([c.camera.position.toArray(), c.controls.target.toArray()]) === JSON.stringify(camBefore[i])), 'exit VR: both cameras are where they were');
-check(renderer.scissor === true && calls.resume === 1 && V.sides.length === 2 && V.sides.every((s, i) => s === sidesBefore[i]) && V.layout === 'two panes', 'exit VR: scissor back, two-pane layout (both sides, same order), normal loop resumed');
+check(renderer.scissor === true && calls.resume >= 1 && V.sides.length === 2 && V.sides.every((s, i) => s === sidesBefore[i]) && V.layout === 'two panes', 'exit VR: scissor back, two-pane layout (both sides, same order), normal loop resumed');
 check(sides.every(s => s.sun.shadow.mapSize.x === 2048), 'exit VR: shadows back to the normal quality level');
-check(site.noteEl === null, 'exit VR: the "Viewing in VR" note leaves the page');
+check(site.noteEl === null, 'exit VR: the "Viewing in VR" cover leaves the page');
+await new Promise(r => setTimeout(r, 100));
+check(stage.kids.map(k => k.name).join(',') === 'canvas,paneL,paneR', 'exit VR: the canvas is back under the two mouse panes, where it was', stage.kids.map(k => k.name).join(','));
+check(!site.cls.has('in-vr'), 'exit VR: the simulation is back above the page (no in-vr class)');
 // a second session works, and starts without the card
 renderer.rendered.length = 0; await VR.enterVR(xr); step(2);
 check(VR.vrState() && VR.vrState().card === false && last().scene === sides[0].scene, 'a second VR session starts again, without the controls card');

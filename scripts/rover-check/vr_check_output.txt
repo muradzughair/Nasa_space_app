@@ -3,6 +3,7 @@ PASS  with immersive-vr supported: "View in VR" in the top bar
 PASS  enter VR: renderer.xr presents and drawing runs through renderer.setAnimationLoop
 PASS  in VR the vertical exaggeration is 1 (real scale)  (exag 1)
 PASS  in VR the two-pane scissor is off
+PASS  in VR the simulation steps below an emulator's full-window layer (in-vr class)
 PASS  in VR the shadow map follows the vr profile  (1024 px)
 PASS  reference space: local-floor (standing, floor at the ground)
 PASS  starts on the target ground: its scene is drawn and the label reads its title  (Mars ground: Jezero Crater · 3.71 m/s²)
@@ -31,8 +32,10 @@ PASS  exit VR: the vertical exaggeration is restored  (2.5)
 PASS  exit VR: both cameras are where they were
 PASS  exit VR: scissor back, two-pane layout (both sides, same order), normal loop resumed
 PASS  exit VR: shadows back to the normal quality level
-PASS  exit VR: the "Viewing in VR" note leaves the page
+PASS  exit VR: the "Viewing in VR" cover leaves the page
+PASS  exit VR: the canvas is back under the two mouse panes, where it was  (canvas,paneL,paneR)
+PASS  exit VR: the simulation is back above the page (no in-vr class)
 PASS  a second VR session starts again, without the controls card
 PASS  and ends cleanly
 
-all 36 passed
+all 39 passed
