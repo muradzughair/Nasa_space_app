@@ -16,6 +16,15 @@ const STEP = { mass_kg: 5, wheel_radius_m: 0.005, wheel_width_m: 0.005, motor_po
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const H = { ctx: () => null };
 const fmt = (k, v) => FMT[k](v) + (UNIT[k] ? ' ' + UNIT[k] : '');
+// Small icons for the rover action buttons (Change rover, Customize, Compare two builds).
+const ICON = {
+  pick: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cust: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h7M12 4h2M2 8h2M7 8h7M2 12h8M13 12h1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="10.5" cy="4" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.5" cy="8" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="12" r="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+  cmp: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.8" y="2.5" width="5.2" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2.5" width="5.2" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+};
+const actBtn = (attrs, icon, label, alt) => `<button type="button" class="rv-act${alt ? ' alt' : ''}" ${attrs}>${ICON[icon]}<span>${label}</span></button>`;
+// Where to go back to when the picker or the Customize drawer closes (the "Drive a rover" window hands one in; Site View's rover bar does not).
+let pickerBack = null, drawerBack = null;
 
 export function initRoverUI(hooks) {
   Object.assign(H, hooks);
@@ -26,13 +35,24 @@ export function initRoverUI(hooks) {
     <div id="rvDrawer" class="rv-drawer hidden" role="dialog" aria-modal="false" aria-labelledby="rvDrawT"><div class="rv-dhead"><h2 id="rvDrawT">Customize rover</h2><button class="icon-btn" data-close aria-label="Close the customize panel">&times;</button></div><div class="rv-dbody" id="rvDrawBody"></div></div>
     <div id="rvCompare" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rvCmpT"><div class="modal-card rv-card wide"><button class="btn ghost close" data-close aria-label="Close">Close</button>
       <h1 id="rvCmpT">Compare two rover builds ${info('Both builds drive the same route on the same ground. Green marks the better of the two values. Reachable means the route fits the battery, the slope limit and the pushing force.', 'About comparing builds')}</h1><div id="rvCmpBody"></div></div></div>`);
-  for (const id of ['rvPicker', 'rvCompare']) { const m = $(id); m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) m.classList.add('hidden'); }); }
+  $('rvPicker').addEventListener('click', e => { if (e.target === $('rvPicker') || e.target.closest('[data-close]')) closePicker(); });
+  { const m = $('rvCompare'); m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) m.classList.add('hidden'); }); }
   $('rvDrawer').addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDrawer(); });
   document.addEventListener('keydown', onEsc);
   refreshRoverUI();
 }
-const onEsc = e => { if (e.key === 'Escape') { for (const id of ['rvPicker', 'rvCompare']) { const m = $(id); if (m) m.classList.add('hidden'); } } };
-export function disposeRoverUI() { document.removeEventListener('keydown', onEsc); drawerOpen = false; }
+/** Escape closes only the top-most window: the picker or the build comparison first, then the Customize drawer. ("Drive a rover" handles its own
+ *  Escape, and it is hidden while the picker or the drawer is open from it, so one press never closes two windows.) */
+const shown = id => { const m = $(id); return !!m && !m.classList.contains('hidden'); };
+const onEsc = e => {
+  if (e.key !== 'Escape') return;
+  if (shown('rvPicker')) closePicker();
+  else if (shown('rvCompare')) $('rvCompare').classList.add('hidden');
+  else if (drawerOpen && shown('rvDrawer')) closeDrawer();
+  else return;
+  e.stopPropagation();
+};
+export function disposeRoverUI() { document.removeEventListener('keydown', onEsc); drawerOpen = false; pickerBack = null; drawerBack = null; }
 
 // ---------------------------------------------------------------- rover bar (Site View) and the one-line rover chooser (Drive start screen)
 export function roverSummary(cfg) {
@@ -41,8 +61,8 @@ export function roverSummary(cfg) {
 }
 export function refreshRoverUI() {
   const bar = $('roverBar'); if (!bar || !R.cfg) return;
-  bar.innerHTML = roverSummary(R.cfg) + `<div class="rv-actions"><button class="btn small" id="rvPick">Change rover</button><button class="btn small" id="rvCust">Customize</button><button class="btn small ghost" id="rvCmp">Compare two builds</button></div>`;
-  $('rvPick').onclick = () => openPicker(); $('rvCust').onclick = () => openDrawer(); $('rvCmp').onclick = () => openCompare();
+  bar.innerHTML = roverSummary(R.cfg) + `<div class="rv-actions">${actBtn('id="rvPick"', 'pick', 'Change rover')}${actBtn('id="rvCust"', 'cust', 'Customize')}${actBtn('id="rvCmp"', 'cmp', 'Compare two builds', true)}</div>`;
+  $('rvPick').onclick = () => openPicker(null, () => $('rvPick') && $('rvPick').focus()); $('rvCust').onclick = () => openDrawer(); $('rvCmp').onclick = () => openCompare();
   if (!$('rvDrawer').classList.contains('hidden')) {
     const body = $('rvDrawBody'), a = document.activeElement;
     if (a && a.type === 'range' && body.contains(a)) {            // while a slider is dragged, update the numbers only so the slider keeps focus
@@ -50,29 +70,46 @@ export function refreshRoverUI() {
     } else paintDrawer(true);
   }
 }
+/** The rover line of the "Drive a rover" window. "Change rover" and "Customize" put that window aside while the picker or the drawer is open
+ *  (both live inside #site, a stacking context below the window, so they could never show above it) and bring it back, repainted for the new
+ *  rover or build, when they close. */
 export function mountRoverLine(el, onChange) {
-  const paint = () => { el.innerHTML = roverSummary(R.cfg) + `<div class="rv-actions"><button class="btn small" data-a="pick">Change rover</button><button class="btn small" data-a="cust">Customize</button></div>`; };
+  const paint = () => { el.innerHTML = roverSummary(R.cfg) + `<div class="rv-actions">${actBtn('data-a="pick"', 'pick', 'Change rover')}${actBtn('data-a="cust"', 'cust', 'Customize')}</div>`; };
   paint();
-  el.onclick = e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a === 'pick') openPicker(() => { paint(); onChange && onChange(); }); if (a === 'cust') { openDrawer(); } };
+  const host = el.closest('.modal');
+  const back = a => () => { paint(); onChange && onChange(); if (host) { host.classList.remove('hidden'); const b = el.querySelector(`[data-a="${a}"]`); if (b) b.focus(); } };
+  el.onclick = e => {
+    const a = e.target.closest('[data-a]')?.dataset.a; if (!a) return;
+    if (host) host.classList.add('hidden');
+    if (a === 'pick') openPicker(null, back('pick'));
+    if (a === 'cust') openDrawer(back('cust'));
+  };
   return paint;
 }
 
 // ---------------------------------------------------------------- picker
-export function openPicker(done) {
+export function openPicker(done, back) {
+  pickerBack = back || null;
   const cards = R.reg.order.map(id => {
     const row = R.reg.rovers[id], c = cfgOf({ id, ov: {}, cos: {} });
     return `<button class="rcard rv-pick${id === R.build.id ? ' active' : ''}" data-id="${id}"><img src="${ROOT}assets/models/previews/${row.inherit || id}.png" alt="" width="160" height="100" loading="lazy"><div class="t"><span>${esc(row.display_name)}</span></div>
       <div class="n">${esc(row.mission)} &middot; ${esc(PLANET[row.planet])}</div><div class="n">${c.mass_kg.toFixed(0)} kg, ${c.n_wheels} wheels, wheel radius ${c.wheel_radius_m} m</div></button>`;
   }).join('');
   $('rvCards').innerHTML = cards;
-  $('rvCards').onclick = e => { const b = e.target.closest('.rv-pick'); if (!b) return; R.picked = true; selectRover(b.dataset.id); $('rvPicker').classList.add('hidden'); done && done(); };
+  $('rvCards').onclick = e => { const b = e.target.closest('.rv-pick'); if (!b) return; R.picked = true; selectRover(b.dataset.id); done && done(); closePicker(); };
   $('rvPicker').classList.remove('hidden');
+  const first = $('rvCards').querySelector('.rv-pick.active') || $('rvCards').querySelector('.rv-pick'); if (first) first.focus();
 }
+function closePicker() { $('rvPicker').classList.add('hidden'); const f = pickerBack; pickerBack = null; if (f) f(); }
 
 // ---------------------------------------------------------------- customize drawer
 let drawerOpen = false;
-export function openDrawer() { $('rvDrawer').classList.remove('hidden'); drawerOpen = true; paintDrawer(false); }
-function closeDrawer() { $('rvDrawer').classList.add('hidden'); drawerOpen = false; }
+export function openDrawer(back) {
+  drawerBack = back || null;
+  $('rvDrawer').classList.remove('hidden'); drawerOpen = true; paintDrawer(false);
+  if (drawerBack) { const c = $('rvDrawer').querySelector('[data-close]'); if (c) c.focus(); }   // opened from "Drive a rover": keyboard focus moves into the drawer
+}
+function closeDrawer() { $('rvDrawer').classList.add('hidden'); drawerOpen = false; const f = drawerBack; drawerBack = null; if (f) f(); }
 function slider(cfg, k) {
   const lim = cfg.limits?.[k] || R.reg.rovers[cfg.id].limits[k], f = cfg.fig[k], v = k === 'wheel_count' ? cfg.n_wheels : f.value;
   if (k === 'wheel_count') return `<div class="rv-row"><label>${LABEL[k]}</label><div class="seg" role="group" aria-label="Wheel count">${[4, 6].map(n => `<button data-wc="${n}" class="${cfg.n_wheels === n ? 'on' : ''}">${n}</button>`).join('')}</div><span class="rv-t"></span></div>`;

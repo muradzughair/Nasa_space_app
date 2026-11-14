@@ -381,7 +381,15 @@
 .rsim .rv-name small { flex-basis: 100%; color: var(--muted); font-size: var(--t-xs); }
 .rsim .rv-figs { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--t-xs); color: var(--muted); }
 .rsim .rv-figs b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-.rsim .rv-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); }
+.rsim .rv-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--s3); }
+/* Change rover, Customize, Compare two builds: clearly buttons, in the simulator's teal like Drive */
+.rsim .rv-act { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 6px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: rgba(45,212,191,.1); color: var(--accent); font-weight: 600; font-size: var(--t-sm); line-height: 1.2; cursor: pointer; transition: background var(--dur), color var(--dur), border-color var(--dur), box-shadow var(--dur); }
+.rsim .rv-act:hover { background: rgba(45,212,191,.2); color: #5eead4; border-color: #5eead4; box-shadow: 0 0 0 3px rgba(45,212,191,.12); }
+.rsim .rv-act:active { background: rgba(45,212,191,.28); }
+.rsim .rv-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rsim .rv-act svg { flex: none; }
+.rsim .rv-act.alt { background: transparent; border-color: rgba(45,212,191,.55); }
+.rsim .rv-act.alt:hover { background: rgba(45,212,191,.12); border-color: #5eead4; }
 .rsim .btn.on { border-color: var(--accent); color: var(--accent); }
 .rsim .rv-card { width: min(920px, 94vw); }
 .rsim .rv-card.wide { width: min(1040px, 96vw); }
