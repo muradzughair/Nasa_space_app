@@ -16,6 +16,7 @@ import { R as RS, initRovers, createInstance, updateInstance, evictExcept, onCha
 import { initRoverUI, refreshRoverUI, disposeRoverUI } from './roverui.js';
 import { info, installInfo, closeInfo } from './info.js';
 import { groundClass } from './soilmech.js';
+import { initVR, exitVR } from './vr.js';
 
 const $ = id => document.getElementById(id);
 const COL_T = '#38bdf8', COL_E = '#fb923c';
@@ -47,6 +48,7 @@ export const TEMPLATE = `
   <div class="site-top">
     <button id="siteBack" class="btn ghost" aria-label="Back to the globe">&larr; Back to globe</button>
     <div id="siteTitle" class="site-title"></div>
+    <span id="vrSlot" class="vr-slot"></span>
     <div class="gfx-wrap"><button id="gfxBtn" class="btn ghost small" aria-expanded="false" aria-controls="gfxPop">Graphics</button><div id="gfxPop" class="gfx-pop hidden" role="dialog" aria-label="Graphics quality"></div></div>
   </div>
   <div id="siteNote" class="site-note hidden" role="alert"></div>
@@ -509,7 +511,26 @@ export async function openSite({ host, ctx, patch, imagery, targetGround, onBack
   V.open = true; cancelAnimationFrame(V.raf); V.last = performance.now(); V.frameErr = false; V.simErr = false; V.lodReady = false;
   if (V.sides.length) V.raf = requestAnimationFrame(frame);
   window.TERRA_SITE = V;
+  guard('the VR button', null, () => initVR(vrHooks));
 }
+/** What vr.js may use of Site View: playback, the rovers, the grounds and the way back to the normal two-pane view. */
+const vrHooks = {
+  get V() { return V; },
+  slot: () => $('vrSlot'),
+  siteNote,
+  advancePlayback,
+  togglePlay,
+  restart: () => { V.u = 0; V.snap = true; V.shown = false; play(true); },
+  setSpeed: sp => { V.speed = sp; paintSpeeds(); },
+  setExag: ex => { $('exag').value = ex; $('exagO').textContent = String(ex); V.exag = ex; V.sides.forEach(updateGeometry); updateAll(true); },
+  setShadowSize,
+  applySide,
+  wake,
+  title: s => s.title || (s.same && s.key === 'target' ? `Earth ground at ${V.ctx.target.bodyName} gravity · ${s.g} m/s²` : `Earth: ${V.ctx.place.name} · ${s.g} m/s²`),
+  startSide: () => (comparing() ? 0 : Math.max(0, V.sides.findIndex(s => s.key === 'earth'))),
+  /** Back to the normal loop after a VR session: canvas size, shadows, cameras and the two-pane layout are drawn as before. */
+  resume: () => { if (!V.open) return; V.renderer.setScissorTest(true); resize(); V.sides.forEach(applySide); V.last = performance.now(); V.snap = true; V.lodReady = false; wake(2000); cancelAnimationFrame(V.raf); V.raf = requestAnimationFrame(frame); },
+};
 function disposeScene(scene) {
   const keep = new Set(); if (V.tex) for (const k in V.tex) { const t = V.tex[k]; keep.add(t.map); keep.add(t.normal); keep.add(t.rough); }
   scene.traverse(o => {
@@ -525,6 +546,7 @@ function disposeSides() {
 }
 /** Leaves Site View and frees everything it made: GPU resources, rover models, listeners, the DOM. */
 export async function closeSite() {
+  await exitVR();
   if (V.drive) await V.drive.exit(true);
   closeInfo();
   V.open = false; cancelAnimationFrame(V.raf); V.playing = false; clearTimeout(buildPending);
@@ -829,7 +851,7 @@ function updateSunShadow(i) {
 
 // ---------------------------------------------------------------- frame loop
 function frame(now) {
-  if (!V.open) return;
+  if (!V.open || V.vr) return;   // in VR, vr.js drives drawing with renderer.setAnimationLoop (WebXR needs it)
   V.raf = requestAnimationFrame(frame);
   const drew = !!(V.drive || (V.sides.length && (V.playing || V.snap || now < V.awake || V.cams[0].anim || V.cams[1].anim))), t0 = qStart();   // quality.js measures every drawn frame (F3 overlay, auto quality, ?bench)
   try { frameBody(now); } catch (e) { if (!V.frameErr) { V.frameErr = true; console.error(e); siteNote(`A drawing error occurred: ${errText(e)}`); } }
@@ -840,6 +862,14 @@ function frameBody(now) {
   if (V.drive) { V.drive.frame(dt, now); return; }
   if (!V.sides.length) return;
   if (!(V.playing || V.snap || now < V.awake || V.cams[0].anim || V.cams[1].anim)) return;
+  advancePlayback(dt, now);
+  V.lodForce = V.snap || !V.lodReady; V.lodReady = true;
+  V.sides.forEach((s, i) => updateCamera(i, dt)); V.snap = false;
+  frameDraw();
+}
+/** Playback: the shared timeline V.u moves on, every pane's rover is posed at its point of its own drive, and the HUD, charts, timeline and verdict follow.
+ *  Used by the normal loop and by VR (vr.js), so both sides always stay at the same moment. */
+function advancePlayback(dt, now) {
   const run = V.runs;
   if (run) try {
     if (V.playing) {
@@ -854,8 +884,8 @@ function frameBody(now) {
     if (V.u >= 1 && !run.verdictShown) showVerdict();
     if (V.u < 1 && run.verdictShown) { run.verdictShown = false; $('vpVerdict').classList.add('hidden'); }
   } catch (e) { if (!V.simErr) { V.simErr = true; failPanel('simStatus', 'the rover simulation display', e); } }
-  V.lodForce = V.snap || !V.lodReady; V.lodReady = true;
-  V.sides.forEach((s, i) => updateCamera(i, dt)); V.snap = false;
+}
+function frameDraw() {
   linkCameras();
   const c = $('siteCanvas'), w = c.clientWidth, h = c.clientHeight, two = V.sides.length > 1, half = Math.floor(w / 2);
   if (!w || !h) return;

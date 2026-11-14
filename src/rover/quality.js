@@ -53,6 +53,9 @@ if (!(Q.mode in NAMED) && Q.mode !== 'auto') Q.mode = 'auto';
 Q.step = Q.mode === 'auto' ? Math.min(LEVELS.length - 1, Math.max(0, +(store.get(KEY_AUTO) || 0))) : NAMED[Q.mode];
 Q.gov = new Governor(Q.step);
 export const level = () => LEVELS[Q.step];
+/** The "vr" profile: the current level made lighter for a headset's 72 to 90 frames a second. At most a 1024 shadow map over a tighter area, no inset view,
+ *  less dust; the terrain level of detail stays that of the current level (same LOD rules as the normal view). Pixel ratio does not apply: the headset sets it. */
+export const vrLevel = () => { const L = level(); return { ...L, name: `${L.name}, VR`, shadow: Math.min(L.shadow, 1024), ext: Math.min(L.ext, 0.5), insetEvery: 0, insetShadowEvery: 0, dust: Math.min(L.dust, 0.4) }; };
 export const qualityState = () => ({ mode: Q.mode, step: Q.step, name: LEVELS[Q.step].name, aa: Q.aa, gpuTimer: !!Q.gpu });
 window.TERRA_QUALITY = { state: qualityState, set: m => setMode(m), levels: LEVELS, gov: () => Q.gov };
 /** Antialiasing can only be chosen when the renderer is created: on when the last session did not need Low or below. */
