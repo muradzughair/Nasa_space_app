@@ -29,7 +29,7 @@ export class Ground {
   constructor(scene, patch, mat, ctxMat, o = {}) {
     const U = upsample(patch), M = U.M, cells = M - 1;
     Object.assign(this, { scene, patch, U, M, mat, half: patch.size / 2, ex: 1, k: o.k || 0.03, C: cells >= 2048 ? 128 : 64, pending: 0, tris: 0, builds: 0, lru: [] });
-    this.T = cells / this.C; this.maxS = Math.max(1, this.C / 4); this.border = Math.max(1, cells / 32);   // the surroundings have nodes every 1/32 of the patch
+    this.T = cells / this.C; this.maxS = Math.max(1, this.C / 4); this.border = Math.max(1, cells / (patch.C ? 16 : 32));   // the surroundings have nodes every 1/16 (real ring, drawn at 125 m) or 1/32 (mirrored demo copies) of the patch
     this.group = new THREE.Group(); scene.add(this.group);
     this.tiles = [];
     for (let ti = 0; ti < this.T; ti++) for (let tj = 0; tj < this.T; tj++) {
@@ -46,12 +46,59 @@ export class Ground {
       const g = this.tileGeometry({ i0: 0, j0: 0, x0: -this.half, z0: -this.half }, this.border, cells);
       for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) {
         if (!a && !b) continue;
-        const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.position.set(a * patch.size, 0, b * patch.size); m.scale.set(Math.abs(a) % 2 ? -1 : 1, 1, Math.abs(b) % 2 ? -1 : 1);
+        const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.userData.ring = Math.max(Math.abs(a), Math.abs(b)); m.position.set(a * patch.size, 0, b * patch.size); m.scale.set(Math.abs(a) % 2 ? -1 : 1, 1, Math.abs(b) % 2 ? -1 : 1);
         this.group.add(m); this.ctx.push(m);
       }
       this.outerGeo = g;
     }
+    // detail patch: a small grid at full resolution that follows the rover (64 m on 1 m grids). Tiles under it get a hole, so it is the only surface
+    // there; the tiles themselves stay at stride 2 or coarser. The far tiles (coarsest strides) are merged into one mesh: one draw call instead of ~150.
+    this.nP = Math.max(16, Math.min(64, Math.round(64 / U.dx / 8) * 8));   // at least twice the 8-cell alignment, so the rover is always well inside it this.dp = null;
+    this.dpMesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); this.dpMesh.castShadow = true; this.dpMesh.receiveShadow = true; this.dpMesh.visible = false; this.group.add(this.dpMesh);
+    this.farMesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); this.farMesh.receiveShadow = true; this.farMesh.visible = false; this.group.add(this.farMesh); this.farKey = '';
     this.rocks = o.rock ? new Rocks(this, o.rock) : null;
+  }
+  /** Place the detail patch (grid indices, aligned to 8 so tiles at stride 8 or finer can cut an exact hole). Re-centred when the rover leaves the middle half. */
+  placePatch(f) {
+    const n = this.nP, cells = this.M - 1, ci = Math.round((f[1] + this.half) / this.U.dx), cj = Math.round((f[0] + this.half) / this.U.dx), dp = this.dp;
+    if (dp && Math.abs(ci - (dp.i0 + n / 2)) <= n / 4 && Math.abs(cj - (dp.j0 + n / 2)) <= n / 4) return false;
+    const al = v => Math.max(0, Math.min(cells - n, Math.round((v - n / 2) / 8) * 8));
+    this.dp = { i0: al(ci), j0: al(cj), n }; return true;
+  }
+  overlaps(t) { const d = this.dp; return !!d && !(t.i0 + this.C <= d.i0 || t.i0 >= d.i0 + d.n || t.j0 + this.C <= d.j0 || t.j0 >= d.j0 + d.n); }
+  curAt(i, j) { const t = this.tileAt(Math.floor(i / this.C), Math.floor(j / this.C)); return t ? (t.cur || this.maxS) : this.border; }
+  /** Build the detail patch and put its edge vertices on the straight lines the neighbouring tiles draw (no cracks). */
+  buildPatch(rebuild) {
+    const d = this.dp, n = d.n, m = n + 1, { U, M } = this, h = U.h, dx = U.dx;
+    if (rebuild) {
+      const pos = new Float32Array(m * m * 3), nor = new Float32Array(m * m * 3);
+      for (let a = 0; a < m; a++) for (let b = 0; b < m; b++) { const ui = d.i0 + a, uj = d.j0 + b, o = (a * m + b) * 3, il = Math.max(0, ui - 1), ir = Math.min(M - 1, ui + 1), jl = Math.max(0, uj - 1), jr = Math.min(M - 1, uj + 1);
+        const gx = (h[ui * M + jr] - h[ui * M + jl]) / ((jr - jl) * dx), gz = (h[ir * M + uj] - h[il * M + uj]) / ((ir - il) * dx), inv = 1 / Math.hypot(gx, 1, gz);
+        pos[o] = uj * dx - this.half; pos[o + 1] = h[ui * M + uj]; pos[o + 2] = ui * dx - this.half; nor[o] = -gx * inv; nor[o + 1] = inv; nor[o + 2] = -gz * inv; }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(sharedIndex(m));
+      g.userData = { s: 1, m, tris: n * n * 2, detail: true }; g.computeBoundingSphere();
+      this.dpMesh.geometry.dispose(); this.dpMesh.geometry = g; this.dpMesh.visible = true;
+    }
+    const pos = this.dpMesh.geometry.attributes.position.array;
+    for (let side = 0; side < 4; side++) {   // north row, south row, west column, east column
+      const horiz = side < 2, fixed = side === 0 || side === 2 ? 0 : n;
+      for (let q = 0; q <= n; q++) {
+        const ui = horiz ? d.i0 + fixed : d.i0 + q, uj = horiz ? d.j0 + q : d.j0 + fixed;
+        const oi = horiz ? (fixed ? ui : ui - 1) : ui, oj = horiz ? uj : (fixed ? uj : uj - 1), ii = horiz ? (fixed ? ui - 1 : ui) : ui, ij = horiz ? uj : (fixed ? uj - 1 : uj);   // cells just outside and just inside this edge
+        const S = Math.max(this.curAt(Math.max(0, oi), Math.max(0, oj)), this.curAt(Math.max(0, ii), Math.max(0, ij))), c = horiz ? uj : ui;
+        let y = h[ui * M + uj];
+        if (S > 1 && c % S) { const c0 = c - (c % S), c1 = Math.min(M - 1, c0 + S), f = (c - c0) / S, ya = horiz ? h[ui * M + c0] : h[c0 * M + uj], yb = horiz ? h[ui * M + c1] : h[c1 * M + uj]; y = ya + (yb - ya) * f; }
+        pos[((horiz ? (fixed ? n : 0) * m + q : q * m + (fixed ? n : 0))) * 3 + 1] = y;
+      }
+    }
+    this.dpMesh.geometry.attributes.position.needsUpdate = true;
+  }
+  /** Index buffer of a tile at stride s without the cells inside the detail patch. */
+  holeIndex(t, s, m) {
+    const d = this.dp, idx = []; for (let a = 0; a < m - 1; a++) for (let b = 0; b < m - 1; b++) {
+      const i0 = t.i0 + a * s, j0 = t.j0 + b * s; if (i0 >= d.i0 && i0 + s <= d.i0 + d.n && j0 >= d.j0 && j0 + s <= d.j0 + d.n) continue;
+      const v00 = a * m + b, v10 = v00 + m, v01 = v00 + 1, v11 = v10 + 1; idx.push(v00, v10, v01, v10, v11, v01); }
+    return new THREE.Uint32BufferAttribute(idx, 1);
   }
   setExag(ex) { this.ex = ex; this.group.scale.y = ex; if (this.rocks) this.rocks.update(null, null, true); }
   /** Grid tile: (cells / s + 1)^2 vertices at stride s of the fine grid. Positions are world metres centred on the patch (y unscaled). */
@@ -68,7 +115,9 @@ export class Ground {
   }
   /** The real context ring: a grid over the ring with the patch cut out. Its inner border has the patch's own heights at every node, and the patch's
    *  border tiles are stitched to those nodes, so the seam is closed. */
-  ringGeometry(C) {
+  ringGeometry(C0) {   // drawn at every 2nd node of the 62.5 m ring grid (125 m): the far surroundings do not need more, and it is a quarter of the triangles
+    const st = 2, nn = (C0.n - 1) / st + 1, h0 = new Float32Array(nn * nn); for (let i = 0; i < nn; i++) for (let j = 0; j < nn; j++) h0[i * nn + j] = C0.h[(i * st) * C0.n + j * st];
+    const C = { n: nn, h: h0, dx: C0.dx * st, size: C0.size };
     const n = C.n, pos = new Float32Array(n * n * 3), nor = new Float32Array(n * n * 3), uv = new Float32Array(n * n * 2), h = C.h, hs = C.size / 2;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const o = (i * n + j) * 3, jl = Math.max(0, j - 1), jr = Math.min(n - 1, j + 1), il = Math.max(0, i - 1), ir = Math.min(n - 1, i + 1);
       const gx = (h[i * n + jr] - h[i * n + jl]) / ((jr - jl) * C.dx), gz = (h[ir * n + j] - h[il * n + j]) / ((ir - il) * C.dx), inv = 1 / Math.hypot(gx, 1, gz);
@@ -100,32 +149,50 @@ export class Ground {
   }
   /** Choose the level of detail of every tile from the camera position and build what is missing, nearest first. A time budget keeps a frame short;
    *  force builds everything now (first frame, snaps). Returns the number of tiles still waiting. */
-  update(cam, force) {
+  update(cam, force, focus) {   // focus: [[x, z]] world position of the rover: the full-detail patch follows it (tiles under it are built at once)
     const { tiles, U, ex } = this, budget = force ? Infinity : 4, t0 = performance.now(), changed = new Set();
-    let need = [];
+    let need = []; const moved = focus && focus[0] ? this.placePatch(focus[0]) : false, hasP = !!this.dp;
     for (const t of tiles) {
       const dx = Math.max(t.x0 - cam.x, 0, cam.x - t.x0 - t.w), dz = Math.max(t.z0 - cam.z, 0, cam.z - t.z0 - t.w), dy = Math.max(t.lo * ex - cam.y, 0, cam.y - t.hi * ex), d = Math.hypot(dx, dy, dz);
-      t.d = d; const want = s => Math.max(1, Math.min(this.maxS, pow2floor(Math.max(1, s * this.k / U.dx))));
+      t.d = d; t.mesh.castShadow = !hasP && d < 40;   // only nearby terrain casts shadows; with a rover, only the detail patch around it does
+      const want = s => Math.max(1, Math.min(this.maxS, pow2floor(Math.max(1, s * this.k / U.dx))));
       let w = want(d);
       if (t.cur && t.cur !== w && t.cur >= want(d * 0.85) && t.cur <= want(d * 1.18)) w = t.cur;   // hysteresis: no flicker at a boundary
+      t.pin = hasP && this.overlaps(t); if (hasP) w = Math.max(2, w); if (t.pin) w = Math.min(8, w);   // under the patch: stride 2 to 8, so the hole is exact
       t.want = w; if (w !== t.cur) need.push(t);
     }
     need.sort((a, b) => a.d - b.d); let left = 0;
     for (const t of need) {
       let g = t.geos.get(t.want);
-      if (!g) { if (performance.now() - t0 > budget && t.cur) { left++; continue; } g = this.tileGeometry(t, t.want); t.geos.set(t.want, g); }
+      if (!g) { if (performance.now() - t0 > budget && t.cur && !t.pin) { left++; continue; } g = this.tileGeometry(t, t.want); t.geos.set(t.want, g); }
       t.mesh.geometry = g; t.mesh.visible = true; t.cur = t.want; g.userData.edge = ''; changed.add(t);
       for (const n of [this.tileAt(t.ti - 1, t.tj), this.tileAt(t.ti + 1, t.tj), this.tileAt(t.ti, t.tj - 1), this.tileAt(t.ti, t.tj + 1)]) if (n) changed.add(n);
       if (t.want <= 2) { const key = t; this.lru = this.lru.filter(x => x !== key); this.lru.push(key); }
     }
     for (const t of changed) if (t.cur) this.stitch(t);
+    if (hasP) {
+      for (const t of tiles) { if (!t.cur) continue; const g = t.mesh.geometry, key = t.pin ? `${g.userData.s}|${this.dp.i0},${this.dp.j0}` : '';   // holes under the detail patch
+        if ((g.userData.hole || '') !== key) { if (g.userData.holeIdx) g.userData.holeIdx = null; g.setIndex(key ? (g.userData.holeIdx = this.holeIndex(t, g.userData.s, g.userData.m)) : sharedIndex(g.userData.m)); g.userData.hole = key; } }
+      if (moved || changed.size) this.buildPatch(moved);
+    }
+    // far tiles (the two coarsest strides, not under the patch) are drawn as one merged mesh
+    const farS = Math.max(2, this.maxS / 2), members = tiles.filter(t => t.cur >= farS && !t.pin), fkey = members.map(t => t.ti * this.T + t.tj + ':' + t.cur + ':' + t.mesh.geometry.userData.edge).join(',');
+    if (fkey !== this.farKey) {
+      this.farKey = fkey; let nv = 0, ni = 0; for (const t of members) { nv += t.mesh.geometry.attributes.position.count; ni += t.mesh.geometry.index.count; }
+      const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), idx = new Uint32Array(ni); let ov = 0, oi = 0;
+      for (const t of members) { const g = t.mesh.geometry, P = g.attributes.position.array, N = g.attributes.normal.array, I = g.index.array; pos.set(P, ov * 3); nor.set(N, ov * 3); for (let k = 0; k < I.length; k++) idx[oi + k] = I[k] + ov; ov += P.length / 3; oi += I.length; }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
+      this.farMesh.geometry.dispose(); this.farMesh.geometry = g; this.farMesh.visible = members.length > 0;
+    }
+    for (const t of tiles) if (t.cur) t.mesh.visible = !(t.cur >= farS && !t.pin);
     // fine geometries that are no longer shown are freed, oldest first, beyond a small cache
     if (this.lru.length > 40) { const keep = []; let extra = this.lru.length - 40; for (const t of this.lru) { if (extra > 0 && t.cur > 2) { for (const [s, g] of t.geos) if (s <= 2) { g.dispose(); t.geos.delete(s); } extra--; } else keep.push(t); } this.lru = keep; }
-    if (changed.size) { let n = 0; for (const t of tiles) n += t.mesh.geometry.userData.tris || 0; this.tris = n; }
+    if (changed.size || moved) { let n = 0; for (const t of tiles) n += t.mesh.geometry.userData.tris || 0; this.tris = n + (this.dp ? this.nP * this.nP * 2 : 0); }
     this.pending = left; return left;
   }
   dispose() {
     for (const t of this.tiles) for (const g of t.geos.values()) g.dispose();
+    this.dpMesh.geometry.dispose(); this.farMesh.geometry.dispose();
     this.ctx.forEach(m => m.geometry.dispose()); if (this.rocks) this.rocks.dispose();
     this.scene.remove(this.group);
   }
@@ -141,7 +208,7 @@ class Rocks {
     for (let i = 0; i < p.count; i++) { const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`; if (!bump.has(key)) bump.set(key, 0.72 + rnd() * 0.5); const k = bump.get(key); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.7, p.getZ(i) * k); }
     geo.computeVertexNormals();
     this.mat = new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.95, metalness: 0, flatShading: true });
-    this.mesh = new THREE.InstancedMesh(geo, this.mat, this.N); this.mesh.castShadow = true; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false; this.mesh.count = 0;
+    this.mesh = new THREE.InstancedMesh(geo, this.mat, this.N); this.mesh.castShadow = false; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false; this.mesh.count = 0;
     ground.scene.add(this.mesh); this.seed = hashStr(ground.patch.id + '|rocks'); this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(); this._s = new THREE.Vector3(); this._p = new THREE.Vector3();
   }
   /** Re-seat the rocks when the focus (the rover, in world metres) has moved more than two cells. */
