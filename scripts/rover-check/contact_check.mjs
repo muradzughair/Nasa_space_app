@@ -14,6 +14,8 @@
 // a ground from the Copernicus DEM over the network and has no browser here, so the same modules run in Node (Three.js geometry needs no WebGL) on
 // two synthetic Earth grounds in exactly the shape earthground.ts hands to makePatch() (513 x 513 over 2 km, 161 x 161 ring over 10 km), each at the
 // two gravities a place is driven at (Mars target and Earth). No screenshots.
+// Added for the target-vs-Earth comparison: the real Gale Crater target ground (public/rover/targets/, loaded by targetground.ts exactly as the
+// browser loads it) must load, and the wheels must rest on it the same way at Mars gravity.
 import fs from 'node:fs'; import { resolveObjectURL } from 'node:buffer';
 // ---- the few browser globals the modules and GLTFLoader touch, and file access for the models under public/rover/
 const PUB = new URL('../../public/', import.meta.url);
@@ -56,6 +58,17 @@ function earthGround(id, amp, rough) {
   return makePatch(id, 129, { M, h, size }, { n, size: cs, h: hc }, { synthetic_fine: true, missing: [] });
 }
 const GROUNDS = [['rolling', earthGround('pt_test_rolling', 60, 0.25)], ['rough', earthGround('pt_test_rough', 160, 0.6)]];
+// ---- the Gale Crater target ground, read from public/rover/targets/ through the app's own loader
+{
+  const { loadTargetGround } = await import('../../src/rover/targetground');
+  const read = async f => { const b = fs.readFileSync(new URL('rover/targets/' + f, PUB)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+  let gale = null, why = '';
+  try { gale = await loadTargetGround('mars_gale', { read }); } catch (e) { why = e.message; }
+  const p = gale && gale.patch;
+  check(!!(p && p.U && p.U.M === 2049 && p.C && p.C.n === 161 && p.size === 2000 && gale.target.gravity === 3.71 && p.stats.relief > 1 && p.U.h.reduce((a, b) => Math.min(a, b), Infinity) === 0),   // lowest point of the fine grid at 0 m
+    'Gale target ground loads (targetground.ts)', p ? `fine ${p.U.M} x ${p.U.M} over ${p.size} m, ring ${p.C.n} x ${p.C.n} over ${p.C.size} m, relief ${p.stats.relief.toFixed(1)} m, median slope ${p.stats.slope_med.toFixed(1)}°, gravity ${gale.target.gravity}` : why);
+  if (p) GROUNDS.push(['Gale target', p, [['Mars gravity', gale.target.gravity]]]);
+}
 const REG = JSON.parse(fs.readFileSync(new URL('rover/assets/models/rovers.json', PUB)));
 RV.initRovers(REG, 'mars');
 const ROVERS = QUICK ? ['perseverance'] : RV.R.reg.order, EXS = [1, 2, 5], GRAV = [['Mars gravity', 3.71], ['Earth gravity', 9.81]];
@@ -83,9 +96,9 @@ for (const id of ROVERS) {
   // drawn wheel size: the old bug (node.scale.set(kw, kr, kr) over the dequantization scale) drew wheels about 4x too big
   { rover.root.updateMatrixWorld(true); const box = new THREE.Box3(); wheels[0].w.node.traverse(o => { if (o.isMesh) box.expandByObject(o); }); const d = box.max.y - box.min.y;
     check(Math.abs(d / (2 * par.wheel_radius_m) - 1) < 0.25, `${id}: drawn wheel diameter matches the config`, `${d.toFixed(3)} m drawn vs ${(2 * par.wheel_radius_m).toFixed(3)} m`); }
-  for (const [gname, patch] of GROUNDS) {
+  for (const [gname, patch, grav = GRAV] of GROUNDS) {
     const scene = new THREE.Scene(), mat = new THREE.MeshBasicMaterial(), ground = new Ground(scene, patch, mat, mat, { k: 0.03 });
-    for (const [side, g] of GRAV) {
+    for (const [side, g] of grav) {
       const sim = new DR.DriveSim(patch, par, { g, mu: frictionFromSoil(traits.soil), soil: traits.soil, mass: par.mass_kg, S });
       const poses = EXS.map(() => ({ init: false })), stat = EXS.map(() => ({ minC: Infinity, maxC: -Infinity, frames: 0, bad: 0, high: 0, hang: 0, strideMax: 0, first: null, rechecked: 0 }));
       const sides = EXS.map((ex, e) => ({ patch, rover, pose: poses[e], tracks: null }));
