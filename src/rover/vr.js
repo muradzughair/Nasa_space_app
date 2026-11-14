@@ -70,6 +70,7 @@ export async function enterVR(xr = navigator.xr) {
   const R = V.renderer;
   S = { session, floor, saved: { exag: V.exag }, side: clamp(H.startSide(), 0, V.sides.length - 1), mode: 'stand', last: performance.now(), panelT: 0, force: true, hands: {}, prev: {}, held: false, aim: false, hover: null, objs: [] };
   V.vr = S; cancelAnimationFrame(V.raf);   // site.js's loop stands still while V.vr is set
+  { const dc = document.getElementById && document.getElementById('driveChooser'); if (dc) dc.classList.add('hidden'); }   // VR and Drive mode never run together
   try {
     if (V.exag !== 1) H.setExag(1);        // real scale: 1 unit = 1 m, true rover size, no vertical exaggeration
     build(V, R);
@@ -107,7 +108,8 @@ function note(on) {
   const site = H.slot() && H.slot().closest('#site'); if (!site) return;
   let n = site.querySelector('#vrNote');
   if (!on) { if (n) n.remove(); return; }
-  if (!n) { site.insertAdjacentHTML('beforeend', '<div id="vrNote" class="vr-note" role="status"><span>Viewing in VR</span><button class="btn small" id="vrExit">Exit VR</button></div>'); n = site.querySelector('#vrNote'); n.querySelector('#vrExit').onclick = () => exitVR(); }
+  // covers the whole 2D page while the headset is in use, so nothing behind it (Drive, Play, the panels) can be started on top of the VR session
+  if (!n) { site.insertAdjacentHTML('beforeend', '<div id="vrNote" class="vr-cover" role="dialog" aria-modal="true" aria-label="Viewing in VR"><div class="vr-note"><span>Viewing in VR</span><button class="btn small" id="vrExit">Exit VR</button></div></div>'); n = site.querySelector('#vrNote'); n.querySelector('#vrExit').onclick = () => exitVR(); }
 }
 
 // ---------------------------------------------------------------- the VR objects: rig (camera and controllers), panels, teleport arc, slip rings

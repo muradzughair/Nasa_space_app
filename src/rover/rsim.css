@@ -499,4 +499,5 @@
 .rsim .vr-slot + .gfx-wrap { margin-left: var(--s2); }
 .rsim .vr-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .rsim .vr-btn:hover { background: rgba(45,212,191,.12); }
-.rsim .vr-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 40; display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: rgba(8,12,19,.9); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--text); font-weight: 600; box-shadow: 0 12px 40px rgba(0,0,0,.55); }
+.rsim .vr-cover { position: absolute; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(4,7,12,.55); }
+.rsim .vr-note { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); background: rgba(8,12,19,.9); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--text); font-weight: 600; box-shadow: 0 12px 40px rgba(0,0,0,.55); }

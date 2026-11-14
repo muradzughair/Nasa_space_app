@@ -30,7 +30,7 @@ const compass = b => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b /
 
 // ---------------------------------------------------------------- chooser (D1)
 export function openChooser(V) {
-  M.V = V; if (M.active || !V.runs) return;
+  M.V = V; if (M.active || !V.runs || V.vr) return;   // not while the simulation is shown in VR (vr.js)
   const place = V.ctx.place;
   const paintCards = () => {
   const par = roverPar(), card = (i, kind, name, line, g) => `<button class="rcard dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span></div></button>`;
@@ -47,7 +47,7 @@ export function openChooser(V) {
 async function fade(to, ms = 260) { const f = $('dvFade'); f.style.transition = `opacity ${Math.max(30, ms * motion.scale)}ms ease`; f.style.opacity = to; f.classList.toggle('on', to > 0); await wait(ms + 30); }
 
 async function startDrive(i) {
-  const V = M.V; if (M.active || M.busy || !V) return; M.busy = true;
+  const V = M.V; if (M.active || M.busy || !V || V.vr) return; M.busy = true;
   $('driveChooser').classList.add('hidden');
   try { const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (r && r.then) r.then(() => { M.fs = true; }).catch(() => { M.fs = false; }); } catch (e) { M.fs = false; }   // from the click; if refused we fill the window instead
   setSitePlaying(false);
