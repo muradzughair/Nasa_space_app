@@ -67,6 +67,15 @@ export interface Pin {
   lon: number;
   active: boolean;
 }
+
+/** A numbered red mark on one of the heatmap's top places (the ranked list on the right). */
+export interface Hotspot {
+  lat: number;
+  lon: number;
+  rank: number;
+  /** What a screen reader announces and the tooltip shows. */
+  label: string;
+}
 /**
  * Camera heights between which day/night shading fades away, so the surface
  * is always fully lit and readable once you are zoomed in.
@@ -149,6 +158,9 @@ export class GlobeController {
   private verifyEntities: Entity[] = [];
   private walkthrough: Walkthrough | null = null;
   private pins: Entity[] = [];
+  /** HTML layer above the globe holding the numbered hotspot marks; made on first use. */
+  private hotspotLayer: HTMLDivElement | null = null;
+  private hotspots: { el: HTMLButtonElement; position: Cartesian3; rank: number }[] = [];
   private imageryRequest = 0;
   private terrainRequest = 0;
   private hasElevation = false;
@@ -192,7 +204,7 @@ export class GlobeController {
   private destroyed = false;
 
   constructor(
-    container: HTMLElement,
+    private readonly container: HTMLElement,
     creditContainer: HTMLElement,
     private readonly marker: HTMLElement,
     planetId: PlanetId = "earth",
@@ -660,6 +672,59 @@ export class GlobeController {
     this.viewer.scene.requestRender();
   }
 
+  /**
+   * Numbered red marks on the heatmap's best places, as the old app drew its
+   * hotspots: round HTML buttons kept on their spot each frame and hidden on
+   * the far side of the planet. Clicking one calls `onPick`. An empty list
+   * removes them.
+   */
+  setHotspots(list: Hotspot[], onPick: (h: Hotspot) => void): void {
+    for (const h of this.hotspots) h.el.remove();
+    this.hotspots = [];
+    if (!list.length || !this.planet.earthServices) {
+      this.viewer.scene.requestRender();
+      return;
+    }
+    if (!this.hotspotLayer) {
+      const layer = (this.hotspotLayer = document.createElement("div"));
+      layer.className = "hotspots";
+      this.container.after(layer);
+    }
+    for (const h of list) {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "hotspot-mark";
+      el.textContent = String(h.rank);
+      el.title = h.label;
+      el.setAttribute("aria-label", h.label);
+      el.style.display = "none";
+      el.addEventListener("click", () => onPick(h));
+      this.hotspotLayer.appendChild(el);
+      this.hotspots.push({ el, position: Cartesian3.fromDegrees(h.lon, h.lat), rank: h.rank });
+    }
+    this.viewer.scene.requestRender();
+  }
+
+  /** Lights up one hotspot mark (a row of the ranked list is hovered or focused); null for none. */
+  highlightHotspot(rank: number | null): void {
+    for (const h of this.hotspots) h.el.classList.toggle("is-hl", h.rank === rank);
+  }
+
+  private updateHotspots(): void {
+    if (!this.hotspots.length) return;
+    const { scene, camera } = this.viewer;
+    this.occluder.cameraPosition = camera.positionWC;
+    for (const h of this.hotspots) {
+      const at = this.occluder.isPointVisible(h.position) ? SceneTransforms.worldToWindowCoordinates(scene, h.position, this.scratchWindow) : undefined;
+      if (!at) {
+        if (h.el.style.display !== "none") h.el.style.display = "none";
+        continue;
+      }
+      h.el.style.display = "";
+      h.el.style.transform = `translate3d(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px, 0)`;
+    }
+  }
+
   setLighting(enabled: boolean): void {
     const { scene, imageryLayers } = this.viewer;
     scene.globe.enableLighting = enabled;
@@ -1001,6 +1066,7 @@ export class GlobeController {
   private onPostRender(): void {
     const now = performance.now();
     this.updateMarker();
+    this.updateHotspots();
     this.updateNightLights();
     this.updateGroundAtmosphere();
     if (now - this.lastHud > 80) this.emitHud(now);
@@ -1175,6 +1241,8 @@ export class GlobeController {
     this.cleanup.forEach((fn) => fn());
     this.hudListeners.clear();
     this.handler.destroy();
+    this.hotspotLayer?.remove();
+    this.hotspots = [];
     this.viewer.destroy();
   }
 }

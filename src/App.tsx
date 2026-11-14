@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Controls } from "./components/Controls";
-import { HeatmapLayer } from "./components/HeatmapControls";
+import { HeatmapLayer, TopPlacesBar } from "./components/HeatmapControls";
 import { Hud } from "./components/Hud";
 import { AtlasIcon, VerifyIcon } from "./components/icons";
 import { InfoCard } from "./components/InfoCard";
@@ -25,6 +25,8 @@ export function App() {
   const planet = useStore((s) => s.planet);
   const atlasOpen = useStore((s) => s.atlas.open);
   const verifyOpen = useStore((s) => s.verify.open);
+  // While the heatmap is on and no place is open, the right side shows the ranked list of its best places instead of a card.
+  const showTopPlaces = useStore((s) => s.heatmap.on && s.planet === "earth" && !s.selection && !s.atlas.siteId);
 
   // One globe per world: switching planets tears the viewer down and builds
   // a new one on that world's ellipsoid.
@@ -97,7 +99,7 @@ export function App() {
 
       <HeatmapLayer globe={globe} />
       <TargetBar globe={globe} />
-      {verifyOpen ? <VerifyPanel globe={globe} /> : <InfoCard globe={globe} />}
+      {verifyOpen ? <VerifyPanel globe={globe} /> : showTopPlaces ? <TopPlacesBar globe={globe} /> : <InfoCard globe={globe} />}
       <Hud globe={globe} />
       <Controls globe={globe} />
       <div ref={creditsRef} className="credits" />

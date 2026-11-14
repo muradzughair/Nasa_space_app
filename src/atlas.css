@@ -609,6 +609,110 @@ button.targetbar-row:hover {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
+/* The heatmap's ranked list of best places: in the card's place on the right while no place is open. */
+.top-places-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.top-places-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.top-places-sub {
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.top-places-list {
+  display: grid;
+  gap: 1px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.top-places-list button {
+  display: grid;
+  grid-template-columns: 24px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 9px;
+  text-align: left;
+}
+
+.top-places-list button:hover,
+.top-places-list button:focus-visible {
+  background: var(--hover);
+}
+
+.top-places-rank {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e0262b;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.top-places-name {
+  min-width: 0;
+}
+
+.top-places-place {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-places-coords {
+  display: block;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.top-places-score {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.top-places-score i {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.top-places-score b {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #9e1012, #f65826);
+}
+
+@media (max-width: 640px) {
+  .card.reading.top-places {
+    max-height: 36dvh;
+  }
+}
+
 .reading > .atlas-back {
   margin-bottom: 8px;
 }

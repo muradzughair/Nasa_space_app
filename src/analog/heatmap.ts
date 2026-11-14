@@ -186,16 +186,19 @@ export function distribution(cells: CellScores, threshold: number): Distribution
 export const SCALE_MAX = 0.6;
 
 /**
- * One hue, dark to light, evenly spaced over 0 to SCALE_MAX: magnitude only.
- * Light means similar because the map sits on dark imagery and a dark panel.
+ * Red-hot, dark to light, evenly spaced over 0 to SCALE_MAX: magnitude only.
+ * Weak matches are a dark red that recedes into the dark imagery; the best
+ * places glow bright red, orange and yellow, so they stand out from the
+ * whole-planet view (the old app's hotspot look, in red).
  */
 export const RAMP: [number, number, number][] = [
-  [52, 20, 8],
-  [110, 38, 10],
-  [176, 72, 12],
-  [232, 124, 22],
-  [250, 184, 72],
-  [255, 240, 190],
+  [42, 6, 10],
+  [98, 10, 14],
+  [158, 16, 18],
+  [214, 34, 26],
+  [246, 88, 38],
+  [255, 162, 66],
+  [255, 228, 150],
 ];
 /** Land cells below the threshold: a neutral wash, so they stay distinct from places with no score. */
 const BELOW: [number, number, number, number] = [150, 158, 172, 70];
@@ -244,6 +247,53 @@ export function paintHeatmap(grid: Grid, cells: CellScores, threshold: number): 
   }
   context.putImageData(image, 0, 0);
   return canvas;
+}
+
+// ------------------------------------------------------------------ top places
+
+export interface TopPlace {
+  /** 1 for the best place. */
+  rank: number;
+  /** Stored cell index. */
+  index: number;
+  /** Centre of the cell. */
+  lat: number;
+  lon: number;
+  score: number;
+}
+
+/** The old app's rule (pickHotspots): peaks at least this far apart, so the list is not twenty cells of one region. */
+export const TOP_MIN_SEPARATION_DEG = 7;
+export const TOP_COUNT = 20;
+const topCache = new WeakMap<CellScores, TopPlace[]>();
+
+/**
+ * The best-scoring cells, greedily: the highest cell first, then each next
+ * highest cell at least TOP_MIN_SEPARATION_DEG of arc from every one already
+ * kept. Reads the scores only; nothing is rescored.
+ */
+export function topPlaces(grid: Grid, cells: CellScores, count = TOP_COUNT, minSepDeg = TOP_MIN_SEPARATION_DEG): TopPlace[] {
+  const cached = count === TOP_COUNT && minSepDeg === TOP_MIN_SEPARATION_DEG ? topCache.get(cells) : undefined;
+  if (cached) return cached;
+  const { scores } = cells;
+  const order = Uint32Array.from({ length: scores.length }, (_, i) => i).sort((a, b) => scores[b] - scores[a]);
+  const rad = Math.PI / 180;
+  const cosSep = Math.cos(minSepDeg * rad);
+  const kept: (TopPlace & { sinLa: number; cosLa: number; lo: number })[] = [];
+  for (let k = 0; k < order.length && kept.length < count; k++) {
+    const index = order[k];
+    const { lat, lon } = cellCentre(grid, index);
+    const la = lat * rad;
+    const lo = lon * rad;
+    const sinLa = Math.sin(la);
+    const cosLa = Math.cos(la);
+    // Too close to a kept peak when the cosine of the arc between them is above that of the separation.
+    if (kept.some((p) => sinLa * p.sinLa + cosLa * p.cosLa * Math.cos(lo - p.lo) > cosSep)) continue;
+    kept.push({ rank: kept.length + 1, index, lat, lon, score: scores[index], sinLa, cosLa, lo });
+  }
+  const list = kept.map(({ rank, index, lat, lon, score }) => ({ rank, index, lat, lon, score }));
+  if (count === TOP_COUNT && minSepDeg === TOP_MIN_SEPARATION_DEG) topCache.set(cells, list);
+  return list;
 }
 
 export interface CellSummary {

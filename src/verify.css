@@ -567,6 +567,20 @@ ol.verify-plain {
   background: transparent;
   border: 2px solid #fff;
 }
+
+.heatmap-keys i.is-top {
+  width: 12px;
+  height: 12px;
+  margin: 2px 2px 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e0262b;
+  outline: 0;
+}
+
+.heatmap-keys li .info-btn {
+  margin-left: 4px;
+}
 .verify-premade {
   margin: 10px 0;
   padding: 10px 12px;
