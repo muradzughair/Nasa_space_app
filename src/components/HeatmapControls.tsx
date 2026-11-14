@@ -214,10 +214,6 @@ export function TopPlacesBar({ globe }: { globe: GlobeController | null }) {
                 <button
                   type="button"
                   onClick={() => openTopPlace(globe, p)}
-                  onMouseEnter={() => globe?.highlightHotspot(p.rank)}
-                  onMouseLeave={() => globe?.highlightHotspot(null)}
-                  onFocus={() => globe?.highlightHotspot(p.rank)}
-                  onBlur={() => globe?.highlightHotspot(null)}
                   aria-label={`${p.rank}. ${placeName(p)}, ${percent(p.score)} similar. Fly there and open it.`}
                 >
                   <span className="top-places-rank" aria-hidden="true">

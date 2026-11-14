@@ -20,7 +20,10 @@ import {
   Ellipsoid,
   EllipsoidalOccluder,
   type Entity,
+  type Billboard,
+  BillboardCollection,
   HeightReference,
+  HorizontalOrigin,
   ImageryLayer,
   Ion,
   JulianDate,
@@ -33,6 +36,7 @@ import {
   SingleTileImageryProvider,
   TextureMagnificationFilter,
   TextureMinificationFilter,
+  VerticalOrigin,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   WebMercatorTilingScheme,
@@ -158,9 +162,10 @@ export class GlobeController {
   private verifyEntities: Entity[] = [];
   private walkthrough: Walkthrough | null = null;
   private pins: Entity[] = [];
-  /** HTML layer above the globe holding the numbered hotspot marks; made on first use. */
-  private hotspotLayer: HTMLDivElement | null = null;
-  private hotspots: { el: HTMLButtonElement; position: Cartesian3; rank: number }[] = [];
+  /** The numbered red marks of the heatmap's top places (billboards), and what a click on one does. */
+  private hotspots: { billboard: Billboard; position: Cartesian3; hotspot: Hotspot }[] = [];
+  private hotspotCollection: BillboardCollection | null = null;
+  private hotspotPick: ((h: Hotspot) => void) | null = null;
   private imageryRequest = 0;
   private terrainRequest = 0;
   private hasElevation = false;
@@ -204,7 +209,7 @@ export class GlobeController {
   private destroyed = false;
 
   constructor(
-    private readonly container: HTMLElement,
+    container: HTMLElement,
     creditContainer: HTMLElement,
     private readonly marker: HTMLElement,
     planetId: PlanetId = "earth",
@@ -344,6 +349,7 @@ export class GlobeController {
 
     this.cleanup.push(viewer.clock.onTick.addEventListener(() => this.onTick()));
     this.cleanup.push(scene.postRender.addEventListener(() => this.onPostRender()));
+    this.cleanup.push(scene.preRender.addEventListener(() => this.updateHotspots()));
 
     let ready = false;
     const markReady = () => {
@@ -674,55 +680,49 @@ export class GlobeController {
 
   /**
    * Numbered red marks on the heatmap's best places, as the old app drew its
-   * hotspots: round HTML buttons kept on their spot each frame and hidden on
-   * the far side of the planet. Clicking one calls `onPick`. An empty list
-   * removes them.
+   * hotspots: billboards drawn by the globe itself, so they stay fixed on
+   * their spot as the camera moves (no HTML that follows a frame behind).
+   * Those on the far side of the planet are hidden. Clicking one calls
+   * `onPick`. An empty list removes them.
    */
   setHotspots(list: Hotspot[], onPick: (h: Hotspot) => void): void {
-    for (const h of this.hotspots) h.el.remove();
+    this.hotspotCollection?.removeAll();
     this.hotspots = [];
-    if (!list.length || !this.planet.earthServices) {
-      this.viewer.scene.requestRender();
-      return;
-    }
-    if (!this.hotspotLayer) {
-      const layer = (this.hotspotLayer = document.createElement("div"));
-      layer.className = "hotspots";
-      this.container.after(layer);
-    }
-    for (const h of list) {
-      const el = document.createElement("button");
-      el.type = "button";
-      el.className = "hotspot-mark";
-      el.textContent = String(h.rank);
-      el.title = h.label;
-      el.setAttribute("aria-label", h.label);
-      el.style.display = "none";
-      el.addEventListener("click", () => onPick(h));
-      this.hotspotLayer.appendChild(el);
-      this.hotspots.push({ el, position: Cartesian3.fromDegrees(h.lon, h.lat), rank: h.rank });
+    this.hotspotPick = null;
+    if (list.length && this.planet.earthServices) {
+      const { scene } = this.viewer;
+      const collection = (this.hotspotCollection ??= scene.primitives.add(new BillboardCollection({ scene })) as BillboardCollection);
+      this.hotspotPick = onPick;
+      this.occluder.cameraPosition = this.viewer.camera.positionWC;
+      for (const h of list) {
+        const position = Cartesian3.fromDegrees(h.lon, h.lat);
+        const billboard = collection.add({
+          position,
+          image: hotspotImage(h.rank),
+          width: 24,
+          height: 24,
+          verticalOrigin: VerticalOrigin.CENTER,
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          // Never hidden by terrain or the imagery it sits on; the far side of the planet is hidden in updateHotspots().
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          show: this.occluder.isPointVisible(position),
+          id: h,
+        });
+        this.hotspots.push({ billboard, position, hotspot: h });
+      }
     }
     this.viewer.scene.requestRender();
   }
 
-  /** Lights up one hotspot mark (a row of the ranked list is hovered or focused); null for none. */
-  highlightHotspot(rank: number | null): void {
-    for (const h of this.hotspots) h.el.classList.toggle("is-hl", h.rank === rank);
-  }
-
+  /**
+   * Hides the marks on the far side of the planet. Runs before each frame is
+   * drawn (scene.preRender), so the frame on screen always matches the
+   * camera. Only `show` changes here, never a position.
+   */
   private updateHotspots(): void {
     if (!this.hotspots.length) return;
-    const { scene, camera } = this.viewer;
-    this.occluder.cameraPosition = camera.positionWC;
-    for (const h of this.hotspots) {
-      const at = this.occluder.isPointVisible(h.position) ? SceneTransforms.worldToWindowCoordinates(scene, h.position, this.scratchWindow) : undefined;
-      if (!at) {
-        if (h.el.style.display !== "none") h.el.style.display = "none";
-        continue;
-      }
-      h.el.style.display = "";
-      h.el.style.transform = `translate3d(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px, 0)`;
-    }
+    this.occluder.cameraPosition = this.viewer.camera.positionWC;
+    for (const h of this.hotspots) h.billboard.show = this.occluder.isPointVisible(h.position);
   }
 
   setLighting(enabled: boolean): void {
@@ -869,6 +869,15 @@ export class GlobeController {
     if (this.clickHandler) {
       this.clickHandler(lat, CesiumMath.toDegrees(point.longitude));
       return;
+    }
+    // A click on a numbered top-place mark opens that place exactly.
+    if (this.hotspots.length && this.hotspotPick) {
+      const picked = scene.pick(windowPosition) as { id?: unknown } | undefined;
+      const mark = picked && this.hotspots.find((h) => h.hotspot === picked.id);
+      if (mark) {
+        this.hotspotPick(mark.hotspot);
+        return;
+      }
     }
     // A click on the ground replaces a curated site's card with the comparison for that point.
     if (store.get().atlas.siteId) updateAtlas({ siteId: null });
@@ -1066,7 +1075,6 @@ export class GlobeController {
   private onPostRender(): void {
     const now = performance.now();
     this.updateMarker();
-    this.updateHotspots();
     this.updateNightLights();
     this.updateGroundAtmosphere();
     if (now - this.lastHud > 80) this.emitHud(now);
@@ -1241,10 +1249,38 @@ export class GlobeController {
     this.cleanup.forEach((fn) => fn());
     this.hudListeners.clear();
     this.handler.destroy();
-    this.hotspotLayer?.remove();
     this.hotspots = [];
+    this.hotspotCollection = null;   // destroyed with the scene's primitives
     this.viewer.destroy();
   }
+}
+
+/** The picture of one numbered top-place mark: a red disc with a white ring and the rank, drawn at twice its shown size so it stays sharp. Cached per rank. */
+const hotspotImages = new Map<number, HTMLCanvasElement>();
+function hotspotImage(rank: number): HTMLCanvasElement {
+  let canvas = hotspotImages.get(rank);
+  if (canvas) return canvas;
+  canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 48;
+  const g = canvas.getContext("2d")!;
+  g.beginPath();
+  g.arc(24, 24, 22, 0, Math.PI * 2);
+  g.fillStyle = "rgba(0, 0, 0, 0.45)";
+  g.fill();
+  g.beginPath();
+  g.arc(24, 24, 19, 0, Math.PI * 2);
+  g.fillStyle = "#e0262b";
+  g.fill();
+  g.lineWidth = 4;
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  g.fillStyle = "#ffffff";
+  g.font = `700 ${rank >= 10 ? 19 : 22}px "Inter Variable", Inter, system-ui, sans-serif`;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(String(rank), 24, 25.5);
+  hotspotImages.set(rank, canvas);
+  return canvas;
 }
 
 /**
