@@ -94,7 +94,7 @@ export const TEMPLATE = `
           <label class="chk" id="linkWrap"><input id="link" type="checkbox" checked> Link views</label>
           <button id="resetCam" class="btn ghost small" aria-label="Reset camera">Reset view</button>
         </div>
-        <div class="note-row"><span id="mouseHint">Drag to orbit &middot; right-drag to pan &middot; scroll to zoom &middot; arrow keys move</span><span id="synthNote"></span></div>
+        <div class="note-row"><span id="synthNote"></span></div>
       </div>
     </div>
     <aside class="site-side" id="siteSide" aria-label="Ground and simulation details">
