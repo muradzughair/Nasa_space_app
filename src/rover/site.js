@@ -592,9 +592,20 @@ function fillGround() {
     row('Relief in the patch', m(st.relief)),
     row('Lowest point', `${e.hmin.toFixed(1)} m (EGM2008)`),
   ].join('');
-  // Attribution and licence (legally required): small and muted, at the bottom of the details panel.
-  $('siteCredits').innerHTML = (im && im.img ? `<p>${esc(im.spec.attribution)}. Terms: ${esc(im.spec.terms)}</p>` : '') + `<p>${esc(e.licence[0])}.</p>`
-    + (V.tg && V.tg.patch.prov && V.tg.patch.prov.licence ? V.tg.patch.prov.licence.map(l => `<p>${esc(V.tg.target.name)}: ${esc(l)}.</p>`).join('') : '');
+  // Attribution and licence (legally required): one short, muted line at the bottom of the details panel; the full text is behind its "!".
+  const full = [], short = [];
+  if (im && im.img) { full.push(`${im.spec.attribution}. Terms: ${im.spec.terms}`); short.push(im.spec.short); }
+  (e.licence || []).forEach(l => { full.push(`${l}.`); short.push(shortCredit(l)); });
+  if (V.tg && V.tg.patch.prov && V.tg.patch.prov.licence) V.tg.patch.prov.licence.forEach(l => { full.push(`${V.tg.target.name}: ${l}.`); short.push(shortCredit(l)); });
+  const line = [...new Set(short)].join(' · ');
+  $('siteCredits').innerHTML = line ? `<span class="sc-line">${esc(line)}</span>${info(full.join(' '), 'Full credits and licences')}` : '';
+}
+/** A licence line in a few words for the credits line, e.g. "Copernicus DEM © DLR, Airbus (ESA)" or "USGS / NASA". The full text stays behind the "!". */
+function shortCredit(l) {
+  if (/^Copernicus DEM/i.test(l)) return 'Copernicus DEM © DLR, Airbus (ESA)';
+  if (/^USGS/i.test(l)) return 'USGS / NASA';
+  if (/^NASA/i.test(l)) return 'NASA';
+  return l.split(/[:;]/)[0].trim();
 }
 /** The Mars or Moon ground of the comparison: where it is from and the soil the rover gets there (its traits through the soil classes, as in the old app). */
 function fillTarget() {

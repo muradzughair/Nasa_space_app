@@ -16,6 +16,8 @@ interface DrapeSpec {
   maxZoom: number;
   tile(z: number, x: number, y: number): string;
   attribution: string;
+  /** The credit in a few words, for the one-line credits under the simulator's details panel. */
+  short: string;
   terms: string;
 }
 
@@ -27,7 +29,8 @@ export const DRAPES: Record<Exclude<DrapeId, "none">, DrapeSpec> = {
     // blankTile=false: a tile Esri does not have answers 404 instead of a "Map data not yet available" picture
     tile: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}?blankTile=false`,
     attribution: "Imagery © Esri, Vantor (Maxar), Earthstar Geographics, and the GIS User Community",
-    terms: "Esri Master License Agreement. The item page lists ArcGIS apps and does not address other viewers; the globe already shows these tiles with this attribution. Not confirmed by the terms for this use.",
+    short: "© Esri, Vantor, Earthstar Geographics",
+    terms: "Esri Master License Agreement.",
   },
   sentinel: {
     label: "Sentinel-2 cloudless 2020 (EOX)",
@@ -35,6 +38,7 @@ export const DRAPES: Record<Exclude<DrapeId, "none">, DrapeSpec> = {
     maxZoom: 15,
     tile: (z, x, y) => `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/${z}/${y}/${x}.jpg`,
     attribution: "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2020)",
+    short: "Sentinel-2 cloudless © EOX (Copernicus data)",
     terms: "CC BY-NC-SA 4.0 for non-commercial use (EOX licence summary); commercial use needs EOX's commercial licence.",
   },
 };

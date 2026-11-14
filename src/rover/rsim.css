@@ -486,8 +486,9 @@
 .rsim .sim-score-text { flex: 1; min-width: 0; color: var(--muted); font-size: var(--t-sm); line-height: 1.35; }
 .rsim .sim-score-num { flex: none; font-size: var(--t-xl); font-weight: 700; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 /* ---- licence and attribution lines, bottom of the details panel */
-.rsim .site-credits { margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.45; }
-.rsim .site-credits p { margin: 0 0 4px; }
+.rsim .site-credits { display: flex; align-items: flex-start; gap: 2px; margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid var(--line); color: var(--faint); font-size: 10.5px; line-height: 1.45; }
+.rsim .site-credits .sc-line { min-width: 0; }
+.rsim .site-credits .info-btn { width: 14px; height: 14px; font-size: 9.5px; margin-top: 1px; }
 /* ---- results of the target and Earth drives side by side (target ground vs Earth) */
 .rsim .verdict .verdict-line { margin: var(--s2) 0; line-height: 1.45; color: var(--text); font-size: var(--t-sm); }
 .rsim .verdict table.res3 th.t { color: var(--target); }
