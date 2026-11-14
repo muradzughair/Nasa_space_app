@@ -507,3 +507,4 @@
 .vr-pill button:hover { border-color: #2dd4bf; color: #2dd4bf; }
 /* instrument panel: room between the value columns, so every column shows in full */
 .rsim .dv-tab th:not(:first-child), .rsim .dv-tab td:not(:first-child) { padding-left: 10px; }
+.rsim .dv-hud .dv-btns { width: 0; min-width: 100%; }   /* the buttons wrap to the table's width instead of widening the panel */
