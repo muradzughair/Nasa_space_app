@@ -133,7 +133,7 @@ export const TEMPLATE = `
 <div id="driveChooser" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dcTitle">
   <div class="modal-card dc-card">
     <button id="dcClose" class="btn ghost close" aria-label="Close">Close</button>
-    <h1 id="dcTitle">Drive a rover ${info("Drive the rover yourself on this ground. There is no goal and no score. With both gravities, a small window shows the same moves at the other gravity.", "About drive mode")}</h1>
+    <h1 id="dcTitle">Drive a rover ${info("Drive the rover yourself on this ground. There is no goal and no score. With two sides open, the instrument panel compares your rover with the same moves on the other side.", "About drive mode")}</h1>
     <div id="dcRover" class="dc-rover"></div>
     <div class="dc-cards" id="dcCards"></div>
     <p class="hint dc-note">Controller or keyboard ${info("Use a PlayStation 5 controller or any standard gamepad (USB-C or Bluetooth), then press a button. On the keyboard, W A S D drives and Space brakes.", "About the controls")}</p>

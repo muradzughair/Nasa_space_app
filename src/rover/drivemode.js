@@ -20,6 +20,7 @@ const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const COL = ['#38bdf8', '#fb923c'];
 const CAMS = ['Chase', 'Low follow', 'Top down'];
+const SHOW_INSET = false;   // the inset view of the other side (bottom right) is off: the instrument panel compares both sides
 const M = { active: false, busy: false, V: null, sims: [], main: 0, other: 1, input: null, scale: 10, cam: 0, pip: true, detailed: true, paused: false, equalLoad: false, realT: 0, saved: [], camState: [], dust: [], orbit: [0, 0], orbitIdle: 0, thr: 0, str: 0, hudT: 0, toastT: 0, fs: false, showSheet: false, rumble: false, padSeen: 0, frameN: 0, perf: { phys: 0, dust: 0, hud: 0, draw: 0, frame: 0 } };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _X = new THREE.Vector3(), _Y = new THREE.Vector3(), _Z = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _t = new THREE.Vector3();
 const wait = ms => new Promise(r => setTimeout(r, ms * motion.scale));
@@ -225,7 +226,8 @@ function paintTop() {
 }
 function paintHudMode() { $('dvHud').classList.toggle('basic', !M.detailed); $('dvHud').classList.toggle('nocmp', !M.pip); $('dvModeTag').textContent = M.detailed ? 'Detailed' : 'Basic'; }
 function sheet(on) { M.showSheet = on; $('dvSheet').classList.toggle('hidden', !on); }
-function setPip(on) { if (M.other < 0) on = false; M.pip = on; $('dvPip').classList.toggle('hidden', !on); if ($('dvHud').innerHTML) paintHudMode(); }
+/** The second rover's values in the instrument panel (Triangle toggles them). The small inset view of the other side is no longer shown: the panel carries the comparison. */
+function setPip(on) { if (M.other < 0) on = false; M.pip = on; $('dvPip').classList.add('hidden'); if ($('dvHud').innerHTML) paintHudMode(); }
 function setScale(s) { M.scale = s; paintTop(); toast(`Demo speed x${s}: simulated time runs ${s} times faster than real time; forces are unchanged`); }
 function cycleCam(d) { M.cam = (M.cam + d + CAMS.length) % CAMS.length; paintTop(); toast('Camera: ' + CAMS[M.cam]); }
 function resetAll() { M.sims.forEach(s => s.reset()); M.dust.forEach(d => d.clear()); M.V.sides.forEach(sd => sd.tracks.reset()); M.realT = 0; M.thr = M.str = 0; placeAll(0.016, true); cameraAll(0.016, true); toast(M.other >= 0 ? 'Both rovers reset to the start' : 'Rover reset to the start'); }
@@ -320,7 +322,7 @@ function renderOnly() {
   };
   siteHelpers.setShadow(V.sides[M.main], L.shadowDrive);   // drive mode defaults lower than Site View: 1024 at High
   draw(M.main, 0, 0, W, H, clamp(roverPar().wheelbase_m * 22, 45, 70), true);
-  if (M.pip && M.other >= 0) {
+  if (SHOW_INSET && M.pip && M.other >= 0) {
     const pr = $('dvPip').getBoundingClientRect(), cr = c.getBoundingClientRect(), w = Math.round(pr.width), h = Math.round(pr.height);
     if (w > 20 && h > 20) {
       // the inset is drawn into a texture at reduced resolution, then copied into its corner; at lower quality it is redrawn every 2nd frame or only

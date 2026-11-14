@@ -314,7 +314,7 @@
 .rsim .dv-exit:hover { border-color: var(--bad); color: var(--bad); }
 .rsim .dv-banner { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); max-width: min(640px, 80%); text-align: center; font-size: var(--t-sm); background: rgba(9,13,21,.92); border: 1px solid var(--line2); border-radius: 999px; padding: 7px 16px; }
 .rsim .dv-banner.alert { border-color: var(--warn); color: var(--warn); }
-.rsim .dv-hud { position: absolute; left: var(--s3); top: 62px; width: 336px; max-height: calc(100% - 130px); overflow: auto; background: rgba(9,13,21,.84); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(6px); font-size: var(--t-sm); scrollbar-width: thin; }
+.rsim .dv-hud { position: absolute; left: var(--s3); top: 62px; width: max-content; min-width: 300px; max-width: calc(100% - 2 * var(--s3)); max-height: calc(100% - 110px); overflow-x: hidden; overflow-y: auto; background: rgba(9,13,21,.84); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(6px); font-size: var(--t-sm); scrollbar-width: thin; }
 .rsim .dv-hh { display: flex; align-items: center; gap: var(--s2); padding: 7px var(--s3); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(9,13,21,.96); z-index: 2; }
 .rsim .dv-hh .dv-mode { color: var(--faint); font-size: var(--t-xs); margin-right: auto; }
 .rsim .dv-hh .ph-title { margin-right: auto; }
@@ -342,7 +342,7 @@
 .rsim .dv-tab td.bat.low { background: linear-gradient(90deg, rgba(251,191,36,.4) var(--bat, 0%), transparent var(--bat, 0%)); color: var(--warn); }
 .rsim .dv-hud.basic tr[data-basic="0"] { display: none; }
 .rsim .dv-hud.nocmp .cmp { display: none; }
-.rsim .dv-hud.nocmp { width: 232px; }
+.rsim .dv-hud.nocmp { min-width: 232px; }
 .rsim .dv-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); }
 .rsim .dv-pip { position: absolute; right: var(--s3); bottom: 48px; width: clamp(240px, 26vw, 380px); aspect-ratio: 16 / 10; border: 2px solid var(--earth); border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgba(0,0,0,.5); pointer-events: none; overflow: hidden; }
 .rsim .dv-pip-label { position: absolute; left: 0; top: 0; right: 0; font-size: var(--t-xs); padding: 4px 8px; background: rgba(8,12,19,.8); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -359,8 +359,8 @@
 .rsim .dv-fade { position: fixed; inset: 0; z-index: 70; background: #03050a; opacity: 0; pointer-events: none; }
 .rsim .dv-fade.on { pointer-events: auto; }
 @media (max-width: 1280px) {
-  .rsim .dv-hud { width: 312px; }
-  .rsim .dv-hud.nocmp { width: 216px; }
+  .rsim .dv-hud { min-width: 0; }
+  .rsim .dv-hud.nocmp { min-width: 0; }
   .rsim .dv-foot .dv-phys { display: none; }
   .rsim .dv-pad { display: none; }
 }
@@ -505,3 +505,5 @@
 .vr-pill { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1001; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; background: rgba(8,12,19,.92); border: 1px solid #2dd4bf; border-radius: 999px; color: #e8eef7; font: 600 14px "Inter Variable", "Inter", system-ui, sans-serif; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
 .vr-pill button { font: inherit; font-size: 13px; color: #e8eef7; background: transparent; border: 1px solid #2f4260; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
 .vr-pill button:hover { border-color: #2dd4bf; color: #2dd4bf; }
+/* instrument panel: room between the value columns, so every column shows in full */
+.rsim .dv-tab th:not(:first-child), .rsim .dv-tab td:not(:first-child) { padding-left: 10px; }
