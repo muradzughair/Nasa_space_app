@@ -32,6 +32,8 @@ export interface SimOptions {
   target: SimTarget;
   /** The globe's imagery layer: the same source is draped on the ground when it is a satellite layer. */
   imagery: DrapeId;
+  /** The analog card's similarity of this place to the target, already formatted ("78%"); null hides the card in the details panel. */
+  similarity?: { text: string; target: string } | null;
   onExit: () => void;
 }
 export interface SimHandle {
@@ -130,6 +132,7 @@ export async function openRoverSim(opts: SimOptions): Promise<SimHandle> {
       soil,
       traits: { soil: soil.soil, dust: soil.dust, temp_mean: soil.tempK ?? 288 },
       prov,
+      similarity: opts.similarity ?? null,
     };
     root.querySelector(".rs-load")?.remove();
     await openSite({ host: root, ctx, patch, imagery: imagery && imagery.img ? imagery : null, onBack: () => void close() });

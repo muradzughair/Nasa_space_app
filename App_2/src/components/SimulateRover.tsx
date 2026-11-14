@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { percent } from "../analog/data";
 import { isCustomId, versionLabel } from "../analog/custom";
 import { PREMADE_VIDEO_TOP_PERCENT, premadeVideoSource, type PremadeVideoPlan } from "../analog/premade";
 import type { Profile } from "../analog/scoring";
@@ -12,6 +13,8 @@ interface Props {
   profile: Profile;
   /** The point is in a sea or ocean (Natural Earth): no ground to drive on. */
   water?: boolean;
+  /** How similar this place is to the chosen version (0 to 1), as the card shows it; null or absent when there is no score. */
+  similarity?: number | null;
 }
 
 /**
@@ -19,7 +22,7 @@ interface Props {
  * chunk loaded only now) on the real ground around this exact point. The
  * globe stops drawing underneath it and is shown again, as it was, on exit.
  */
-export function SimulateRover({ globe, place, profile, water }: Props) {
+export function SimulateRover({ globe, place, profile, water, similarity }: Props) {
   const imagery = useStore((s) => s.activeImagery ?? s.settings.imagery);
   const [busy, setBusy] = useState(false);
   if (water) return <p className="cell-note">Open water: there is no ground here for a rover, so this point cannot be simulated.</p>;
@@ -36,10 +39,13 @@ export function SimulateRover({ globe, place, profile, water }: Props) {
     };
     try {
       const sim = await import("../rover/index");
+      const targetName = isCustomId(profile.id) ? profile.name : `${profile.body === "moon" ? "Moon" : "Mars"}, ${versionLabel(profile)}`;
       await sim.openRoverSim({
         place,
-        target: { id: profile.id, name: isCustomId(profile.id) ? profile.name : `${profile.body === "moon" ? "Moon" : "Mars"}, ${versionLabel(profile)}`, body: profile.body, custom: isCustomId(profile.id) },
+        target: { id: profile.id, name: targetName, body: profile.body, custom: isCustomId(profile.id) },
         imagery: imagery === "sentinel" ? "sentinel" : "esri",
+        // Formatted here with the card's own percent(), so the two numbers always agree.
+        similarity: similarity != null && Number.isFinite(similarity) ? { text: percent(similarity), target: targetName } : null,
         onExit: done,
       });
     } catch (error) {

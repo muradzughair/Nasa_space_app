@@ -61,6 +61,14 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
   const heatmapOn = useStore((s) => s.heatmap.on);
   const scored = !!selection && (scoredId === selection.id || heatmapOn);
   const { grid, failed } = useGrid(onEarth && scored);
+  useCustomTargets();
+  const chosen = resolveProfile(atlas.profiles[atlas.body]);
+  // The headline score of this spot (the same number the card shows), handed to the rover simulation. None until the spot is scored.
+  const spotScore = useMemo(() => {
+    if (!onEarth || !scored || !grid || !selection || selection.water) return null;
+    const cell = cellAt(grid, selection.lat, selection.lon);
+    return cell ? similarity(cell.measures, chosen) : null;
+  }, [onEarth, scored, grid, selection, chosen]);
 
   const site = data?.sites.find((s) => s.id === atlas.siteId) ?? null;
   if (data && site) return <AnalogCard globe={globe} data={data} site={site} />;
@@ -118,8 +126,9 @@ export function InfoCard({ globe }: { globe: GlobeController | null }) {
         <SimulateRover
           globe={globe}
           place={{ name: selection.title, lat: selection.lat, lon: selection.lon, kind: "grid-point" }}
-          profile={resolveProfile(atlas.profiles[atlas.body])}
+          profile={chosen}
           water={selection.water}
+          similarity={spotScore}
         />
       )}
 
