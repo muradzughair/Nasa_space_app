@@ -90,11 +90,23 @@ export function upsample(p) {
   return p.U;
 }
 
-/** Height of a regular grid (m samples per side, spacing dx) at metres (x, z) measured from the patch corner. */
+/** THE height function. Height of a regular grid (m samples per side, spacing dx) at metres (x, z) from the grid corner, interpolated on the same two
+ *  triangles per cell that the terrain mesh draws (ground.js: v00-v10-v01 and v10-v11-v01). The drawn mesh, the wheel contacts, the HUD and the physics
+ *  all read heights through this, so they agree exactly wherever the mesh is drawn at full detail (always the case under the rovers). */
 export function sampleGrid(h, m, dx, x, z) {
-  const fx = Math.max(0, Math.min(m - 1.001, x / dx)), fz = Math.max(0, Math.min(m - 1.001, z / dx));
-  const j = Math.floor(fx), i = Math.floor(fz), tx = fx - j, tz = fz - i;
-  return h[i * m + j] * (1 - tx) * (1 - tz) + h[i * m + j + 1] * tx * (1 - tz) + h[(i + 1) * m + j] * (1 - tx) * tz + h[(i + 1) * m + j + 1] * tx * tz;
+  const fx = Math.max(0, Math.min(m - 1.000001, x / dx)), fz = Math.max(0, Math.min(m - 1.000001, z / dx));
+  const j = Math.floor(fx), i = Math.floor(fz), u = fx - j, w = fz - i, k = i * m + j;
+  return u + w <= 1 ? h[k] + (h[k + 1] - h[k]) * u + (h[k + m] - h[k]) * w : h[k + m + 1] + (h[k + m] - h[k + m + 1]) * (1 - u) + (h[k + 1] - h[k + m + 1]) * (1 - w);
+}
+/** Ground under a wheel's contact patch: the highest point of the shared height function over the footprint (3 points along the heading over
+ *  +-half the wheel radius, 3 across the wheel width). The wheel rests on what it touches first, so grousers do not cut into rising ground. */
+export function contactSampler(p, r, b) {
+  const U = upsample(p), a = 0.5 * r, c = 0.5 * b;
+  return (x, z, fx = 1, fz = 0) => {
+    let best = -Infinity; const rx = fz, rz = -fx;
+    for (let s = -1; s <= 1; s++) for (let t = -1; t <= 1; t++) { const v = sampleGrid(U.h, U.M, U.dx, x + s * a * fx + t * c * rx, z + s * a * fz + t * c * rz); if (v > best) best = v; }
+    return best;
+  };
 }
 /** Surface height at patch coordinates (x, z in 0..size), bilinear on the fine grid that is drawn and that the wheels touch (the real fine grid, or the smooth upsampled demo surface). */
 export function surfaceH(p, x, z) { const U = upsample(p); return sampleGrid(U.h, U.M, U.dx, x, z); }
