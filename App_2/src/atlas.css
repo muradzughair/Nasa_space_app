@@ -510,6 +510,20 @@ button.targetbar-row:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--ink);
   font: inherit;
+  /* The opened list is drawn by the system: ask for its dark look, so it is not white text on white. */
+  color-scheme: dark;
+}
+
+.targetbar-row select option,
+.targetbar-row select optgroup {
+  background: #0e1119;
+  color: var(--ink);
+}
+
+.targetbar-row select optgroup {
+  color: var(--ink-dim);
+  font-style: normal;
+  font-weight: 600;
 }
 
 .targetbar-disclosure svg {
