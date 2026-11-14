@@ -12,6 +12,8 @@ Built for the NASA Space Apps terrestrial-analog challenge. The scoring follows 
 
 React, TypeScript, Vite and CesiumJS. It runs with no API keys.
 
+**AI use.** The code, data-processing scripts, checks and documentation were written with the help of generative AI (Anthropic's Claude models), and the team reviewed all of it. The data values come from the cited public datasets, and the scores come from a fixed formula: no AI runs inside the app. See [AI_USE.md](AI_USE.md).
+
 ## Run it
 
 Requires Node.js 22 or newer (20.19+ also works).

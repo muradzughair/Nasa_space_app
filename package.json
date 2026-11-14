@@ -1,5 +1,6 @@
 {
   "name": "earth",
+  "description": "Analog Atlas: Earth places compared with Moon and Mars sites from open NASA data. Code, data-processing scripts and docs written with the help of generative AI (Anthropic Claude) and reviewed by the team; see AI_USE.md.",
   "private": true,
   "version": "1.0.0",
   "type": "module",
