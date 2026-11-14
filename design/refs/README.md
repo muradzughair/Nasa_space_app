@@ -1,2 +1,0 @@
-- nasa_eyes_ui_1.png, nasa_eyes_ui_2.png : NASA Eyes site, UI mood reference (dark, restrained, data first)
-- earth_ref_1.png, earth_ref_2.png : the Earth look reference (NOT yet added, see below)

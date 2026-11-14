@@ -1,0 +1,13 @@
+0.9 s -> High, 1x pixels
+3.4 s -> Medium
+6.0 s -> Medium, lighter
+8.5 s -> Low
+16.0 s -> Medium, lighter
+23.5 s -> Medium
+31.0 s -> High, 1x pixels
+38.5 s -> High
+41.0 s -> High, 1x pixels
+43.6 s -> Medium
+after slow: Low | after fast: High | final: Medium
+60 Hz display without GPU timer, 33 s at 16.7 ms: stays at Medium
+very slow frames (4 s each, software renderer): High, 1x pixels -> Medium -> Medium, lighter -> Low -> Lowest | final Lowest
