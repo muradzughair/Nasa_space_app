@@ -26,6 +26,8 @@ export interface SimTarget {
   name: string;
   body: "mars" | "moon";
   custom: boolean;
+  /** Latitude of the version's reference place; picks the ground of a custom lunar point (targetground.ts groundFor). */
+  lat?: number;
 }
 export interface SimOptions {
   place: SimPlace;

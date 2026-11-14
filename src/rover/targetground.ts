@@ -81,11 +81,44 @@ export function loadTargetFile(read: TargetReader = fetchReader): Promise<Target
   return meta;
 }
 
+// ---------------------------------------------------------------- which ground stands for which version (the one place to change it)
+/** The ground drawn for a version of Mars or the Moon. `area` names the part of the ground meant; `closest` marks a stand-in (no ground of that kind exists). */
+export interface GroundChoice {
+  targetId: string;
+  area?: string;
+  closest?: boolean;
+}
+/** Versions of src/analog/scoring.ts -> target ids of targets.json. */
+export const GROUND_FOR_VERSION: Record<string, GroundChoice> = {
+  "mars-modern": { targetId: "mars_gale" },
+  "mars-wet": { targetId: "mars_jezero" },
+  "mars-sulfate": { targetId: "mars_gale", area: "Mount Sharp sulfate unit" },
+  "mars-volcanic": { targetId: "mars_jezero", area: "volcanic crater floor" },
+  "mars-polar": { targetId: "mars_gale", closest: true }, // no polar ground available
+  "moon-maria": { targetId: "moon_a11" },
+  "moon-highlands": { targetId: "moon_a11", closest: true }, // no highland ground available
+  "moon-pole": { targetId: "moon_sp" },
+};
+/** Custom lunar points (src/analog/custom.ts): the south-pole ground below this latitude, Apollo 11 otherwise. */
+export const CUSTOM_POLE_LAT = -75;
+
+/** The ground for a version id; a custom lunar point needs its latitude. Unknown versions fall back to the closest ground of their body. */
+export function groundFor(versionId: string, body: "mars" | "moon", lat?: number): GroundChoice {
+  if (versionId.startsWith("moon-custom-")) return lat != null && lat < CUSTOM_POLE_LAT ? { targetId: "moon_sp" } : { targetId: "moon_a11", closest: lat == null || lat < 0 ? undefined : undefined };
+  return GROUND_FOR_VERSION[versionId] ?? { targetId: body === "moon" ? "moon_a11" : "mars_gale", closest: true };
+}
+
+/** Pane title of a target ground, e.g. "Mars ground: Gale Crater (closest available) · 3.71 m/s²". */
+export function groundTitle(choice: GroundChoice, target: TargetInfo): string {
+  const body = target.body === "moon" ? "Moon" : "Mars";
+  const extra = choice.closest ? " (closest available)" : choice.area ? ` (${choice.area})` : "";
+  return `${body} ground: ${target.name}${extra} · ${target.gravity} m/s²`;
+}
+
 /** A target ground ready for Site View: the target and its patch (terrain.js shape: n, size, h, U fine grid, C context ring when real). */
 export interface TargetGround {
   target: TargetInfo;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  patch: any;
+  patch: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 /** Loads the ground of one target id of targets.json (for example "mars_gale"). Rejects with a plain reason. */

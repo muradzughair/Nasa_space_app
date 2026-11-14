@@ -42,7 +42,7 @@ export function SimulateRover({ globe, place, profile, water, similarity }: Prop
       const targetName = isCustomId(profile.id) ? profile.name : `${profile.body === "moon" ? "Moon" : "Mars"}, ${versionLabel(profile)}`;
       await sim.openRoverSim({
         place,
-        target: { id: profile.id, name: targetName, body: profile.body, custom: isCustomId(profile.id) },
+        target: { id: profile.id, name: targetName, body: profile.body, custom: isCustomId(profile.id), lat: profile.place.lat },
         imagery: imagery === "sentinel" ? "sentinel" : "esri",
         // Formatted here with the card's own percent(), so the two numbers always agree.
         similarity: similarity != null && Number.isFinite(similarity) ? { text: percent(similarity), target: targetName } : null,
