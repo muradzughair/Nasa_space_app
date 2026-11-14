@@ -53,7 +53,7 @@ mars  speed 0.202 m/s (max 0.2), drive power 0 W
 earth speed 0.204 m/s (max 0.2), drive power 0 W
 
 == Determinism: two runs, same scripted inputs, bitwise equal state
-identical: true (x 239.937549, z 1000.005870, E 0.7846 Wh)
+identical: true (x 239.938125, z 1000.005789, E 0.7845 Wh)
 
 == Battery: runs to empty and stops
 empty after 2.66 sim h, 1687 m, then speed 0.0000 m/s
