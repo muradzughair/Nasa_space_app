@@ -479,3 +479,21 @@
   .rsim table { table-layout: fixed; width: 100%; }
   .rsim td, .rsim th { overflow-wrap: anywhere; }
 }
+
+/* Graphics quality (quality.js, ported from the old app/style.css additions of the lag fix). The control sits in Site View's top bar; the frame-time
+   overlay (F3), the quality notice and the benchmark summary are appended to <body>, outside .rsim, so they use plain colours, not .rsim variables. */
+.rsim .gfx-wrap { position: relative; margin-left: auto; }
+.rsim .gfx-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 320px; max-width: calc(100vw - 24px); background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); padding: var(--s3) var(--s4); box-shadow: 0 12px 40px rgba(0,0,0,.55); z-index: 60; font-size: var(--t-sm); }
+.rsim .gfx-pop.hidden { display: none; }
+.rsim .gfx-q h4 { margin: 0 0 var(--s2); font-size: var(--t-sm); }
+.rsim .gfx-q .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.rsim .gfx-q .seg button { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font-size: var(--t-xs); }
+.rsim .gfx-q .seg button.active { background: rgba(56,189,248,.18); border-color: #38bdf8; }
+.rsim .gfx-q .hint { margin: var(--s2) 0 0; color: var(--muted); font-size: var(--t-xs); }
+.fps-overlay { position: fixed; left: 8px; bottom: 8px; z-index: 9999; margin: 0; padding: 5px 8px; border-radius: 4px; background: rgba(0,0,0,.75); color: #d1fae5; font: 12px/1.35 ui-monospace, monospace; pointer-events: none; white-space: pre; }
+.fps-overlay.hidden { display: none; }
+.q-notice { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; padding: 6px 12px; border-radius: 6px; background: rgba(8,12,19,.88); border: 1px solid #223046; color: #e8eef7; font: 12.5px "Inter Variable", system-ui, sans-serif; opacity: 0; transition: opacity .3s; pointer-events: none; }
+.q-notice.on { opacity: 1; }
+.bench-panel { position: fixed; right: 16px; bottom: 16px; z-index: 10000; width: min(560px, calc(100vw - 32px)); padding: 12px; border-radius: 8px; background: #0b1220; border: 1px solid #223046; color: #e5e7eb; font: 12.5px "Inter Variable", system-ui, sans-serif; }
+.bench-panel textarea { width: 100%; box-sizing: border-box; font: 12px/1.35 ui-monospace, monospace; background: #050a14; color: #d1fae5; border: 1px solid #223046; border-radius: 4px; padding: 6px; }
+.bench-panel button { margin-top: 6px; padding: 4px 12px; border-radius: 6px; border: 1px solid #223046; background: #13213a; color: inherit; cursor: pointer; }

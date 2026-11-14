@@ -9,6 +9,7 @@ import { D, ROOT } from './data.js';
 import { upsample, surfaceH, worldH } from './terrain.js';
 import { Ground, Tracks, slopeTexture, NRM_RANGE } from './ground.js';
 import { poseOnGround } from './contact.js';
+import { attach as qAttach, level as qLevel, wantAntialias, frameStart as qStart, frameEnd as qEnd, renderControl as qControl } from './quality.js';
 import { planRoute, analyze, verdict, frictionFromSoil, START, GOAL, DS } from './sim.js';
 import { motion, ease } from './globeview.js';
 import { R as RS, initRovers, createInstance, updateInstance, evictExcept, onChange, selectRover, defaultForBody } from './rovers.js';
@@ -45,6 +46,7 @@ export const TEMPLATE = `
     <button id="siteBack" class="btn ghost" aria-label="Back to the globe">&larr; Back to globe</button>
     <div id="siteTitle" class="site-title"></div>
     <div id="siteBadges"></div>
+    <div class="gfx-wrap"><button id="gfxBtn" class="btn ghost small" aria-expanded="false" aria-controls="gfxPop">Graphics</button><div id="gfxPop" class="gfx-pop hidden" role="dialog" aria-label="Graphics quality"></div></div>
   </div>
   <div id="siteNote" class="site-note hidden" role="alert"></div>
   <div class="site-body">
@@ -142,14 +144,14 @@ function ensureRenderer() {
   if (V.ready) return;
   const slot = $('siteCanvas');
   if (!SHARED) {
-    const renderer = new THREE.WebGLRenderer({ canvas: slot, antialias: true, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ canvas: slot, antialias: wantAntialias(), powerPreference: 'high-performance' });   // antialiasing off when the last session needed Low quality (it can only be chosen here, when the shared renderer is first made)
     SHARED = { renderer, canvas: slot };
     // For checks from the console or a test: what the shared renderer still holds on the GPU.
     window.__rsimGL = () => ({ ...SHARED.renderer.info.memory, programs: SHARED.renderer.info.programs.length, size: [SHARED.canvas.width, SHARED.canvas.height], attached: SHARED.canvas.isConnected });
   } else slot.replaceWith(SHARED.canvas);
   const canvas = SHARED.canvas;
   V.renderer = SHARED.renderer;
-  V.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, new URLSearchParams(location.search).has('hq') ? 2 : 1.5));   // capped at 1.5; add ?hq to the address for 2
+  V.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, qLevel().dpr));   // quality level: 1.5, 1 or 0.75 at most (quality.js); ?hq gives 2 (applyQuality)
   V.renderer.setScissorTest(true);
   V.renderer.shadowMap.enabled = true; V.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   V.renderer.toneMapping = THREE.ACESFilmicToneMapping; V.renderer.toneMappingExposure = 0.95;
@@ -179,7 +181,7 @@ function ensureRenderer() {
     $('speeds').appendChild(b);
   });
   const bind = (id, fn) => { const e = $(id), o = $(id + 'O'); e.oninput = () => { if (o) o.textContent = e.value; fn(+e.value); }; };
-  bind('exag', v => { V.exag = v; V.sides.forEach(updateGeometry); updateAll(true); });
+  let exT = 0; bind('exag', v => { V.exag = v; clearTimeout(exT); exT = setTimeout(() => { V.sides.forEach(updateGeometry); updateAll(true); }, 60); });   // debounced: dragging the slider rebuilds once it settles
   bind('sunEl', setSun); bind('sunAz', setSun);
   $('follow').onchange = () => { V.follow = $('follow').checked; if (V.follow && V.runs) goView(true); };
   $('link').onchange = () => { V.link = $('link').checked; };
@@ -191,8 +193,30 @@ function ensureRenderer() {
   $('scrub').oninput = () => { V.u = +$('scrub').value / 1000; V.snap = true; };
   $('vpVerdictClose').onclick = () => $('vpVerdict').classList.add('hidden');
   $('vpVerdictMore').onclick = () => $('verdict').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  V.ready = true;
+  V.ready = true; V.wake = wake;
+  qAttach(V.renderer, applyQuality);
+  qControl($('gfxPop'));   // graphics quality: Auto / High / Medium / Low (quality.js)
+  { const b = $('gfxBtn'), pop = $('gfxPop'), show = on => { pop.classList.toggle('hidden', !on); b.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+    b.onclick = e => { e.stopPropagation(); show(pop.classList.contains('hidden')); };
+    const away = e => { if (!pop.contains(e.target) && e.target !== b) show(false); }; document.addEventListener('click', away); V.off.push(() => document.removeEventListener('click', away)); }
 }
+/** Push a quality level (quality.js) into the renderer and both grounds. Cheap enough to call at any moment; a new shadow map size frees the old map. */
+function applyQuality(L) {
+  V.q = L; const hq = new URLSearchParams(location.search).has('hq');
+  V.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, hq ? 2 : L.dpr)); resize();
+  V.sides.forEach(applySide); wake(800);
+}
+export function setShadowSize(light, n) { if (light.shadow.mapSize.x === n) return; light.shadow.mapSize.set(n, n); if (light.shadow.map) { light.shadow.map.dispose(); light.shadow.map = null; } }
+function applySide(s) {
+  const L = V.q || qLevel();
+  setShadowSize(s.sun, V.drive ? L.shadowDrive : L.shadow);
+  s.ground.k = +new URLSearchParams(location.search).get('lod') || L.lod; s.ground.lodDirty = true;
+  s.ground.ctx.forEach(m => { const r = m.userData.ring; m.visible = r == null || r <= L.ring; });   // demo grounds: fewer mirrored surround tiles at low quality
+  const U = s.mat.userData.U; U.uSimple.value = L.simple; U.uNrmOn.value = L.nrm;
+  if (s.ctxMat && s.ctxMat !== s.mat && s.ctxMat.userData.U) { s.ctxMat.userData.U.uSimple.value = L.simple; s.ctxMat.userData.U.uNrmOn.value = L.nrm; }
+  if (s.rover) s.rover.model.traverse(o => { if (o.userData.tiny) o.visible = !!L.tiny; });
+}
+export const siteQuality = { applySide: s => applySide(s), level: () => V.q || qLevel() };
 function paintModes() { document.querySelectorAll('#colorModes button').forEach(b => b.classList.toggle('active', b.dataset.mode === V.mode)); }
 function paintSpeeds() { document.querySelectorAll('#speeds button').forEach(b => b.classList.toggle('active', +b.dataset.speed === V.speed)); }
 function resize() {
@@ -243,6 +267,7 @@ function groundMaterial(body, tex, traits, o) {
     : new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...lk.tint.map(v => v * 0.3)), roughness: 1, metalness: 0, side: THREE.DoubleSide });
   const U = { uTint: { value: new THREE.Vector3(...lk.tint).multiplyScalar(lk.bright) }, uSat: { value: lk.sat }, uScale: { value: lk.scale }, uAvg: { value: t ? t.avg : new THREE.Vector3(0.3, 0.3, 0.3) }, uNrm: { value: lk.nrm },
     uPatch: { value: o.size }, uEx: { value: 1 }, uMode: { value: 0 }, uSpan: { value: new THREE.Vector2(o.span[0], Math.max(o.span[1], o.span[0] + 1e-3)) }, uSlopeTex: { value: o.slopeTex }, uHasSlope: { value: o.slopeTex ? 1 : 0 }, uRange: { value: NRM_RANGE },
+    uSimple: { value: 0 }, uNrmOn: { value: 1 },
     uImg: { value: o.img || null }, uHasImg: { value: o.img ? 1 : 0 }, uImgTint: { value: o.gray ? new THREE.Vector3(...IMG_TINT[body]) : new THREE.Vector3(1, 1, 1) } };
   m.userData.U = U;
   m.onBeforeCompile = sh => {
@@ -253,7 +278,7 @@ function groundMaterial(body, tex, traits, o) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vWPos; uniform vec3 uTint; uniform float uSat; uniform float uScale; uniform vec3 uAvg; uniform float uNrm;
-        uniform float uPatch; uniform float uEx; uniform int uMode; uniform vec2 uSpan; uniform sampler2D uSlopeTex; uniform float uHasSlope; uniform float uRange; uniform sampler2D uImg; uniform float uHasImg; uniform vec3 uImgTint;
+        uniform float uPatch; uniform float uEx; uniform int uMode; uniform vec2 uSpan; uniform sampler2D uSlopeTex; uniform float uHasSlope; uniform float uRange; uniform sampler2D uImg; uniform float uHasImg; uniform vec3 uImgTint; uniform float uSimple; uniform float uNrmOn;
         vec3 ramp4(float t, vec3 a, vec3 b, vec3 c, vec3 d, float s1, float s2) { t = clamp(t, 0.0, 1.0); return t < s1 ? mix(a, b, t / s1) : t < s2 ? mix(b, c, (t - s1) / (s2 - s1)) : mix(c, d, (t - s2) / (1.0 - s2)); }`)
       .replace('#include <map_fragment>', `
         vec2 puv = vWPos.xz / uPatch + 0.5; float inP = step(0.0, puv.x) * step(puv.x, 1.0) * step(0.0, puv.y) * step(puv.y, 1.0);
@@ -265,11 +290,12 @@ function groundMaterial(body, tex, traits, o) {
         mat2 R1 = mat2(0.8253, -0.5646, 0.5646, 0.8253), R2 = mat2(0.8776, 0.4794, -0.4794, 0.8776);
         vec2 w1 = vWPos.xz / uScale; vec2 w2 = vWPos.xz / (uScale * 0.21) + vec2(0.37, 0.71); vec2 w3 = vWPos.xz / (uScale * 6.3);
         vec2 w4 = (R1 * vWPos.xz) / (uScale * 1.7) + vec2(0.21, 0.55); vec2 w5 = (R2 * vWPos.xz) / (uScale * 0.47);
-        gb = mix((texture2D(map, w1).rgb + texture2D(map, w4).rgb) * 0.5, (texture2D(map, w2).rgb + texture2D(map, w5).rgb) * 0.5, 0.35);
+        if (uSimple > 0.5) gb = texture2D(map, w1).rgb;   // low quality: one texture scale, no macro variation
+        else gb = mix((texture2D(map, w1).rgb + texture2D(map, w4).rgb) * 0.5, (texture2D(map, w2).rgb + texture2D(map, w5).rgb) * 0.5, 0.35);
         gb = uAvg + (gb - uAvg) * 1.6;
         float glum = dot(gb, vec3(0.299, 0.587, 0.114));
         gb = mix(vec3(glum), gb, uSat) * uTint;
-        float macro = dot(texture2D(map, w3).rgb, vec3(0.333)) / max(0.02, dot(uAvg, vec3(0.333)));
+        float macro = uSimple > 0.5 ? 1.0 : dot(texture2D(map, w3).rgb, vec3(0.333)) / max(0.02, dot(uAvg, vec3(0.333)));
         float farK = smoothstep(180.0, 1100.0, length(vViewPosition));
         gb *= mix(clamp(0.74 + 0.36 * macro, 0.62, 1.3), 1.0, farK);
         vec3 gmean = mix(vec3(dot(uAvg, vec3(0.299, 0.587, 0.114))), uAvg, uSat) * uTint;
@@ -290,12 +316,14 @@ function groundMaterial(body, tex, traits, o) {
       .replace('#include <normal_fragment_maps>', `
         if (hasG > 0.5) normal = normalize((viewMatrix * vec4(normalize(vec3(-gH.x * uEx, 1.0, -gH.y * uEx)), 0.0)).xyz);
         #ifdef USE_NORMALMAP
+        if (uNrmOn > 0.5) {
         mat3 tbnG = getTangentFrame(-vViewPosition, normal, vNormalMapUv);
         vec3 n1 = texture2D(normalMap, w1).xyz * 2.0 - 1.0; vec3 n2 = texture2D(normalMap, w2).xyz * 2.0 - 1.0;
         vec3 mapN = normalize(vec3(n1.xy + n2.xy * 0.8, n1.z));
         float dnear = 1.0 - smoothstep(50.0, 800.0, length(vViewPosition));
         mapN.xy *= uNrm * dnear;
         normal = normalize(tbnG * mapN);
+        }
         #endif`);
   };
   return m;
@@ -345,7 +373,7 @@ function buildSide(patch, body, color, tex, idx, traits, imagery, ground) {
   const hemi = new THREE.HemisphereLight(0xa9c4e8, 0x4a4338, 1.2);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff2dc, 3.2);
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004;
+  sun.castShadow = true; sun.shadow.mapSize.set(1536, 1536); sun.shadow.bias = -0.0004;
   scene.add(sun, sun.target);
   const own = [], keepT = t => { if (t) own.push(t); return t; };
   const slopeTex = keepT(slopeTexture(patch, Math.min(4, V.renderer.capabilities.getMaxAnisotropy())));
@@ -360,7 +388,7 @@ function buildSide(patch, body, color, tex, idx, traits, imagery, ground) {
   const line = new THREE.Line(new THREE.BufferGeometry(), lineMat), lineOn = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff })); line.renderOrder = lineOn.renderOrder = 5; line.visible = lineOn.visible = false; scene.add(line, lineOn);
   const marker = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 14), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, fog: false, depthTest: false })); marker.renderOrder = 8; marker.rotation.x = Math.PI; scene.add(marker);
   const s = { idx, patch, body, scene, sky, sun, hemi, mat, ctxMat, ground: gr, tracks: new Tracks(scene), own, outline, line, lineOn, marker, color, rover: null, pose: { init: false }, ...ground };
-  updateGeometry(s);
+  updateGeometry(s); applySide(s);
   return s;
 }
 
@@ -369,6 +397,7 @@ async function makeRovers() {
   const cfg = RS.cfg, insts = [];
   for (let i = 0; i < V.sides.length; i++) insts.push(await createInstance(cfg));   // the same rover model and scale in every pane
   V.sides.forEach((s, i) => { if (s.rover) s.rover.dispose(); s.rover = insts[i]; s.scene.add(insts[i].root); });
+  V.sides.forEach(applySide);   // tiny-part visibility of the new rover follows the quality level
   await evictExcept(cfg.model).catch(e => console.error(e));
   if (RS.modelError) siteNote(RS.modelError);
   return true;
@@ -724,7 +753,7 @@ function linkCameras() {
 }
 function updateSunShadow(i) {
   const s = V.sides[i], c = V.cams[i], size = s.patch.size, t = c.controls.target, d = c.camera.position.distanceTo(t);
-  const ext = clamp(d * 1.25, 45, size * 0.95);
+  const ext = clamp(d * 1.25, 45, size * 0.95) * (V.q ? V.q.ext : 1);
   s.sun.target.position.copy(t); s.sun.position.copy(t).addScaledVector(V.sunV, size * 1.6);
   const sc = s.sun.shadow.camera;
   if (Math.abs(sc.right - ext) > ext * 0.05) { sc.left = -ext; sc.right = ext; sc.top = ext; sc.bottom = -ext; sc.near = 1; sc.far = size * 4; sc.updateProjectionMatrix(); s.sun.shadow.normalBias = ext * 0.0025; }
@@ -734,7 +763,9 @@ function updateSunShadow(i) {
 function frame(now) {
   if (!V.open) return;
   V.raf = requestAnimationFrame(frame);
+  const drew = !!(V.drive || (V.sides.length && (V.playing || V.snap || now < V.awake || V.cams[0].anim || V.cams[1].anim))), t0 = qStart();   // quality.js measures every drawn frame (F3 overlay, auto quality, ?bench)
   try { frameBody(now); } catch (e) { if (!V.frameErr) { V.frameErr = true; console.error(e); siteNote(`A drawing error occurred: ${errText(e)}`); } }
+  try { qEnd(now, t0, drew); } catch (e) { /* measuring must never break drawing */ }
 }
 function frameBody(now) {
   const dt = Math.min(0.1, (now - V.last) / 1000); V.last = now;
@@ -765,14 +796,15 @@ function frameBody(now) {
     const cam = V.cams[i].camera, x = i ? half + 1 : 0, ww = two ? (i ? w - half - 1 : half - 1) : w;
     const asp = ww / h; if (Math.abs(cam.aspect - asp) > 1e-3) { cam.aspect = asp; cam.updateProjectionMatrix(); }
     updateSunShadow(i);
-    if (s.ground.update(cam.position, V.lodForce)) wake(300);
+    if (s.rover) { const f = s.focus || (s.focus = [[0, 0]]); f[0][0] = s.rover.root.position.x; f[0][1] = s.rover.root.position.z; }
+    if (s.ground.update(cam.position, V.lodForce, s.rover ? s.focus : null)) wake(300);   // tiles still to build: keep drawing; the tiles under the rover are always full detail
     if (s.rover && s.ground.rocks) s.ground.rocks.update(s.rover.root.position.x, s.rover.root.position.z);
     s.sky.position.copy(cam.position);
     if (s.rover) { const dist = cam.position.distanceTo(s.rover.root.position), sc = Math.max(0.2, dist * 0.06);
       s.marker.visible = dist > 70; s.marker.scale.set(sc, sc * 2.4, sc); s.marker.position.set(s.rover.root.position.x, s.rover.root.position.y + 2 + sc * 1.2, s.rover.root.position.z); } else s.marker.visible = false;
     V.renderer.setViewport(x, 0, ww, h); V.renderer.setScissor(x, 0, ww, h);
-    V.renderer.render(s.scene, cam);
-    tris += V.renderer.info.render.triangles;
+    const tr0 = V.renderer.info.render.triangles; V.renderer.render(s.scene, cam);
+    tris += V.renderer.info.render.triangles - tr0;   // info is reset once per frame by quality.js, not per render call
   });
   V.frames = (V.frames || 0) + 1; V.lastTris = tris;
 }
@@ -780,4 +812,4 @@ function frameBody(now) {
 /** Called by drive mode when it hands the canvas back. */
 export function refreshAfterDrive() { V.sides.forEach(s => { s.line.visible = s.lineOn.visible = true; s.pose.init = false; s.tracks.reset(); }); V.lodReady = false; V.snap = true; V.last = performance.now(); updateAll(true); V.dirty = -1; }
 export function setSitePlaying(on) { play(on); }
-export const siteHelpers = { updateGeometryAll: () => V.sides.forEach(updateGeometry), setExag: ex => V.sides.forEach(s => { s.ground.setExag(ex); s.mat.userData.U.uEx.value = ex; }) };
+export const siteHelpers = { setShadow: (s, n) => setShadowSize(s.sun, n), updateGeometryAll: () => V.sides.forEach(updateGeometry), setExag: ex => V.sides.forEach(s => { s.ground.setExag(ex); s.mat.userData.U.uEx.value = ex; }) };

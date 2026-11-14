@@ -10,7 +10,7 @@ import { poseOnGround } from './contact.js';
 import { frictionFromSoil } from './sim.js';
 import { DriveSim, DEMO_SCALES } from './drive.js';
 import { createInput, MAPPING } from './input.js';
-import { refreshAfterDrive, setSitePlaying, siteHelpers } from './site.js';
+import { refreshAfterDrive, setSitePlaying, siteHelpers, siteQuality } from './site.js';
 import { motion } from './globeview.js';
 import { R as RS } from './rovers.js';
 import { mountRoverLine } from './roverui.js';
@@ -83,6 +83,8 @@ async function exit(immediate) {
   if (document.fullscreenElement && document.exitFullscreen) { try { document.exitFullscreen(); } catch (e) { /* ignore */ } }
   M.input.stop(); V.drive = null; V.renderer.shadowMap.autoUpdate = true;
   M.dust.forEach(d => d.dispose()); M.dust = [];
+  if (M.rt) { M.rt.dispose(); M.rt = null; } if (M.blit) { M.blit.m.dispose(); M.blit.scene.children[0].geometry.dispose(); M.blit = null; }
+  siteQuality.applySide(V.sides[M.main]);   // back to the Site View shadow size
   $('site').classList.remove('drive'); $('driveUI').classList.add('hidden'); $('dvPip').classList.add('hidden');
   V.cams.forEach((c, i) => { const s = M.saved[i]; c.camera.position.copy(s.p); c.camera.quaternion.copy(s.q); c.controls.target.copy(s.t); c.controls.update(); c.anim = null; });
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -112,7 +114,7 @@ function makeDust(side, j) {
     dispose() { side.scene.remove(pts); geo.dispose(); mat.dispose(); },
     clear() { life.fill(0); geo.attributes.aLife.needsUpdate = true; },
     update(dt, sim, scale, rover, par) {
-      const g = sim.g, f = sim.fit, vis = Math.abs(sim.v) * scale, rate = (vis * 22 + sim.spin * 70 + (sim.sliding ? 50 : 0)) * (0.4 + M.V.ctx.traits.dust);
+      const g = sim.g, f = sim.fit, vis = Math.abs(sim.v) * scale, rate = (vis * 22 + sim.spin * 70 + (sim.sliding ? 50 : 0)) * (0.4 + M.V.ctx.traits.dust) * siteQuality.level().dust;
       acc += rate * dt; const half = sim.p.size / 2;
       while (acc >= 1) {
         acc -= 1; const k = n++ % N, wp = sim.W[Math.floor(rnd() * sim.W.length)], fx = f.fx, fz = f.fz, rx = f.rx, rz = f.rz;
@@ -138,7 +140,7 @@ function makeDust(side, j) {
 function placeAll(dt, snap) { M.sims.forEach((sim, j) => placeRover(j, sim, dt, snap)); }
 function placeRover(j, sim, dt, snap) {
   // wheel contacts on the fine height grid, the same grid the physics samples; sinkage from the soil model lowers the wheels; tracks are laid behind (contact.js)
-  poseOnGround(M.V.sides[j], sim.x, sim.z, sim.psi, { par: roverPar(), ex: 1, dt, snap, kp: 18, kq: 7, sink: sim.drag ? sim.drag.z || 0 : 0, wheelAng: sim.wheelAng, moving: Math.abs(sim.v) > 0.005 });
+  poseOnGround(M.V.sides[j], sim.x, sim.z, sim.psi, { par: roverPar(), ex: 1, dt, snap, kq: 7, sink: sim.drag ? sim.drag.z || 0 : 0, wheelAng: sim.wheelAng, moving: Math.abs(sim.v) > 0.005 });
 }
 function cameraAll(dt, snap) { cameraFor(M.main, M.sims[M.main], dt, snap, M.V.cams[M.main].camera); if (M.other >= 0) cameraFor(M.other, M.sims[M.other], dt, snap, M.V.cams[M.other].camera); }
 function cameraFor(j, sim, dt, snap, cam) {
@@ -266,7 +268,7 @@ function updateHud() {
 // ---------------------------------------------------------------- frame
 function frame(dt, now) {
   const V = M.V; if (!M.active) { renderOnly(); return; }
-  const st = M.input.poll(dt);
+  const st = M.input.poll(dt); if (window.TERRA_BENCH_INPUT) Object.assign(st, window.TERRA_BENCH_INPUT(M.realT));   // ?bench: scripted throttle and steering
   for (const e of st.pressed) {
     if (e === 'circle') { exit(); return; }
     if (e === 'options') { M.paused = !M.paused; if (!M.paused) { $('dvBanner').classList.add('hidden'); } }
@@ -305,20 +307,39 @@ function frame(dt, now) {
 
 function renderOnly() {
   const V = M.V, r = V.renderer, c = $('siteCanvas'), W = c.clientWidth, H = c.clientHeight; if (!W || !H) return;
-  M.frameN++; r.shadowMap.autoUpdate = false;   // shadows are refreshed by hand: every frame for the main view, every third frame for the small comparison view
-  const draw = (j, x, y, w, h, ext, shadows) => {
+  const L = siteQuality.level();
+  M.frameN++; r.shadowMap.autoUpdate = false;   // shadows are refreshed by hand: every frame for the main view, at a lower rate (or never) for the inset
+  const draw = (j, x, y, w, h, ext, shadows, target) => {
     const s = V.sides[j], cam = V.cams[j].camera, asp = w / h; if (Math.abs(cam.aspect - asp) > 1e-3) { cam.aspect = asp; cam.updateProjectionMatrix(); }
-    if (shadows) { sunFor(j, s.rover.root.position, ext); r.shadowMap.needsUpdate = true; } s.sky.position.copy(cam.position);
-    s.ground.update(cam.position, !M.lod[j]); M.lod[j] = true; if (s.ground.rocks) s.ground.rocks.update(s.rover.root.position.x, s.rover.root.position.z);   // level of detail follows the drive camera
+    if (shadows) { sunFor(j, s.rover.root.position, ext * L.ext); r.shadowMap.needsUpdate = true; } s.sky.position.copy(cam.position);
+    { const f = s.focus || (s.focus = [[0, 0]]); f[0][0] = s.rover.root.position.x; f[0][1] = s.rover.root.position.z; s.ground.update(cam.position, !M.lod[j], f); } M.lod[j] = true; if (s.ground.rocks) s.ground.rocks.update(s.rover.root.position.x, s.rover.root.position.z);   // level of detail follows the drive camera
     M.dust[j] && (M.dust[j].mat.uniforms.uK.value = h / (2 * Math.tan(cam.fov * Math.PI / 360)));
-    r.setViewport(x, y, w, h); r.setScissor(x, y, w, h); r.render(s.scene, cam);
+    if (target) { r.setRenderTarget(target); r.setViewport(0, 0, target.width, target.height); r.setScissor(0, 0, target.width, target.height); r.clear(); r.render(s.scene, cam); r.setRenderTarget(null); }
+    else { r.setViewport(x, y, w, h); r.setScissor(x, y, w, h); r.render(s.scene, cam); }
   };
+  siteHelpers.setShadow(V.sides[M.main], L.shadowDrive);   // drive mode defaults lower than Site View: 1024 at High
   draw(M.main, 0, 0, W, H, clamp(roverPar().wheelbase_m * 22, 45, 70), true);
   if (M.pip && M.other >= 0) {
     const pr = $('dvPip').getBoundingClientRect(), cr = c.getBoundingClientRect(), w = Math.round(pr.width), h = Math.round(pr.height);
-    if (w > 20 && h > 20) draw(M.other, Math.round(pr.left - cr.left), Math.round(cr.bottom - pr.bottom), w, h, clamp(roverPar().wheelbase_m * 16, 35, 55), M.frameN % 3 === 0 || !M.pipInit); M.pipInit = true;
+    if (w > 20 && h > 20) {
+      // the inset is drawn into a texture at reduced resolution, then copied into its corner; at lower quality it is redrawn every 2nd frame or only
+      // when its rover or camera moved, and the copy is reused in between
+      const dpr = r.getPixelRatio(), tw = Math.max(32, Math.round(w * dpr * L.insetScale)), th = Math.max(24, Math.round(h * dpr * L.insetScale));
+      if (!M.rt || M.rt.width !== tw || M.rt.height !== th) { if (M.rt) M.rt.dispose(); M.rt = new THREE.WebGLRenderTarget(tw, th, { type: THREE.HalfFloatType, depthBuffer: true }); M.pipInit = false; }
+      const ro = V.sides[M.other].rover.root, cam = V.cams[M.other].camera, key = M.pipKey || (M.pipKey = new Float64Array(7));
+      const moved = Math.abs(ro.position.x - key[0]) + Math.abs(ro.position.y - key[1]) + Math.abs(ro.position.z - key[2]) > 0.02 || Math.abs(cam.position.x - key[3]) + Math.abs(cam.position.y - key[4]) + Math.abs(cam.position.z - key[5]) > 0.05 || Math.abs(ro.quaternion.y - key[6]) > 0.002;
+      const due = !M.pipInit || (L.insetEvery === 'move' ? moved || M.frameN % 30 === 0 : M.frameN % L.insetEvery === 0);
+      if (due) {
+        const sh = !M.pipInit || (L.insetShadowEvery > 0 && M.frameN % L.insetShadowEvery === 0);
+        draw(M.other, 0, 0, w, h, clamp(roverPar().wheelbase_m * 16, 35, 55), sh, M.rt); M.pipInit = true;
+        key[0] = ro.position.x; key[1] = ro.position.y; key[2] = ro.position.z; key[3] = cam.position.x; key[4] = cam.position.y; key[5] = cam.position.z; key[6] = ro.quaternion.y;
+      }
+      if (!M.blit) { const m = new THREE.MeshBasicMaterial({ map: M.rt.texture, depthTest: false, depthWrite: false }); M.blit = { scene: new THREE.Scene(), cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), m }; M.blit.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m)); }
+      M.blit.m.map = M.rt.texture; const x = Math.round(pr.left - cr.left), y = Math.round(cr.bottom - pr.bottom);
+      r.setViewport(x, y, w, h); r.setScissor(x, y, w, h); r.render(M.blit.scene, M.blit.cam);
+    }
   }
 }
 
 /** Frees what drive mode keeps between drives (the input listeners). Called when the simulator closes. */
-export function disposeDrive() { if (M.input) { M.input.stop(); M.input.dispose(); M.input = null; } M.dust.forEach(d => d.dispose()); M.dust = []; M.sims = []; M.V = null; M.active = false; M.busy = false; delete window.TERRA_DRIVE; }
+export function disposeDrive() { if (M.input) { M.input.stop(); M.input.dispose(); M.input = null; } M.dust.forEach(d => d.dispose()); M.dust = []; if (M.rt) { M.rt.dispose(); M.rt = null; } if (M.blit) { M.blit.m.dispose(); M.blit.scene.children[0].geometry.dispose(); M.blit = null; } M.sims = []; M.V = null; M.active = false; M.busy = false; delete window.TERRA_DRIVE; }

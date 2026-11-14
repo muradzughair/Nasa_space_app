@@ -12,6 +12,7 @@ import { buildEarthGround, GroundUnavailable, PATCH_M, CTX_M, COARSE_N } from ".
 import { earthSoil } from "./earthsoil";
 import { drape, DRAPES, type DrapeId, zoomFor } from "./imagery";
 import { closeSite, openSite } from "./site.js";
+import { benchKind, startBench } from "./quality.js";
 import { makePatch } from "./terrain.js";
 
 export interface SimPlace {
@@ -133,10 +134,65 @@ export async function openRoverSim(opts: SimOptions): Promise<SimHandle> {
     root.querySelector(".rs-load")?.remove();
     await openSite({ host: root, ctx, patch, imagery: imagery && imagery.img ? imagery : null, onBack: () => void close() });
     (window as unknown as Record<string, unknown>).__rsim = { patch, prov, ctx, imagery };
+    const bk = benchKind();
+    if (bk) runBench(bk, abort.signal).catch((e) => console.error("benchmark failed", e));
   } catch (e) {
     if (closed || (e as Error).name === "AbortError") return handle;
     console.error(e);
     fail(e instanceof GroundUnavailable ? e.message : `The ground could not be built: ${(e as Error).message}.`);
   }
   return handle;
+}
+
+/**
+ * ?bench (drive mode) or ?bench=site (Site View orbit), ported from the old app/js/main.js. The old app opened its first site by itself; here a
+ * place is picked on the globe, so the benchmark starts once the simulator has opened a place ("Simulate a rover here" with ?bench in the address):
+ * it waits for the route analysis, runs a 20 s scripted session after 2 s of warm-up, prints TERRA_BENCH to the console and shows a copyable summary.
+ */
+async function runBench(kind: "drive" | "site", signal: AbortSignal) {
+  type Any = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const w = window as unknown as Any;
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const wait = async (fn: () => unknown, ms = 240000) => {
+    const t = performance.now();
+    while (!fn()) {
+      if (signal.aborted) throw new Error("simulator closed");
+      if (performance.now() - t > ms) throw new Error("benchmark timed out");
+      await pause(100);
+    }
+  };
+  await wait(() => w.TERRA_SITE && w.TERRA_SITE.open && w.TERRA_SITE.runs);
+  await pause(1500);
+  const V = w.TERRA_SITE;
+  if (kind === "drive") {
+    document.getElementById("driveBtn")!.click();
+    await wait(() => !document.getElementById("driveChooser")!.classList.contains("hidden"));
+    document.querySelector<HTMLElement>("#dcCards .dc-pick")!.click();
+    await wait(() => w.TERRA_DRIVE && w.TERRA_DRIVE.active);
+    w.TERRA_BENCH_INPUT = (t: number) => ({ throttle: 1, steer: Math.sin(t * 0.35) * 0.6, brake: 0 }); // forward with gentle weaving
+    try {
+      return await startBench("drive");
+    } finally {
+      w.TERRA_BENCH_INPUT = null;
+    }
+  }
+  let on = true;
+  const c = V.cams[0]; // orbit the (linked) views around their target
+  const spin = () => {
+    if (!on || signal.aborted || !V.open) return;
+    const t = c.controls.target, dx = c.camera.position.x - t.x, dz = c.camera.position.z - t.z, a = 0.006;
+    c.camera.position.x = t.x + dx * Math.cos(a) - dz * Math.sin(a);
+    c.camera.position.z = t.z + dx * Math.sin(a) + dz * Math.cos(a);
+    c.controls.update();
+    V.dirty = 0;
+    V.awake = performance.now() + 1e9; // keep drawing for the whole run, however slow a frame is
+    requestAnimationFrame(spin);
+  };
+  requestAnimationFrame(spin);
+  try {
+    return await startBench("site");
+  } finally {
+    on = false;
+    V.awake = 0;
+  }
 }
