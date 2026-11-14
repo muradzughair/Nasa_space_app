@@ -32,9 +32,8 @@ export function openChooser(V) {
   M.V = V; if (M.active || !V.runs) return;
   const place = V.ctx.place;
   const paintCards = () => {
-  const par = roverPar(), card = (i, kind, name, line, g, quality) => `<button class="rcard dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span><span>${quality}</span></div></button>`;
-  const q = 'Real terrain (Copernicus DEM)';
-  $('dcCards').innerHTML = V.sides.map((s, i) => card(i, s.key === 'target' ? `${V.ctx.target.bodyName} gravity` : 'Earth gravity', place.name, s.key === 'target' ? `This Earth ground at the gravity of ${V.ctx.target.name}` : 'This Earth ground at its own gravity', s.g, q)).join('');
+  const par = roverPar(), card = (i, kind, name, line, g) => `<button class="rcard dc-pick" data-i="${i}" style="--c:${COL[i]}"><div class="t"><span>${name}</span><span class="body">${kind}</span></div><div class="n">${line}</div><div class="dc-facts"><span>Gravity <b>${g} m/s&sup2;</b></span><span>Rover <b>${par.name}</b></span></div></button>`;
+  $('dcCards').innerHTML = V.sides.map((s, i) => card(i, s.key === 'target' ? `${V.ctx.target.bodyName} gravity` : 'Earth gravity', place.name, s.key === 'target' ? `This Earth ground at the gravity of ${V.ctx.target.name}` : 'This Earth ground at its own gravity', s.g)).join('');
   $('dcCards').querySelectorAll('.dc-pick').forEach(b => { b.onclick = () => startDrive(+b.dataset.i); });
   };
   paintCards(); mountRoverLine($('dcRover'), paintCards);
@@ -185,7 +184,7 @@ const ROWS = [
   ['power', 'Power', 'W', true, true, 20, v => v.toFixed(0)],
   ['energy', 'Energy used', 'Wh', false, true, 1, v => v.toFixed(2)],
   ['epm', 'Energy per metre', 'J/m', false, true, 80, v => v.toFixed(0)],
-  ['sink', 'Sinkage (assumed)', 'mm', false, true, 5, v => v.toFixed(1)],
+  ['sink', 'Sinkage', 'mm', false, true, 5, v => v.toFixed(1)],
   ['press', 'Ground pressure', 'kPa', false, true, 5, v => v.toFixed(1)],
 ];
 const mmss = s => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), q = Math.floor(s % 60); return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(q).padStart(2, '0'); };
@@ -201,7 +200,7 @@ function buildUI() {
   $('dvHud').innerHTML = `<div class="dv-hh"><span class="ph-title">Instruments</span><span class="dv-mode" id="dvModeTag"></span><button class="icon-btn" id="dvHudToggle" aria-label="Collapse the instrument panel" aria-expanded="true"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
     <div class="dv-hb" id="dvHb"><div class="dv-warns" id="dvWarns" aria-live="polite"></div>
     <table class="dv-tab"><thead><tr><th></th><th><span class="dv-dot" style="background:${COL[M.main]}"></span>${mn.short}</th><th class="cmp"><span class="dv-dot" style="background:${COL[M.other]}"></span>${ot.short}</th><th class="cmp">Diff</th></tr></thead><tbody id="dvRows">${ROWS.map(r => `<tr data-k="${r[0]}" data-basic="${r[3] ? 1 : 0}"><td>${r[1]}</td><td class="v"></td><td class="cmp o"></td><td class="cmp d"></td></tr>`).join('')}
-    <tr data-k="battery" data-basic="1"><td>Battery <small>(illustrative)</small></td><td class="v"></td><td class="cmp o"></td><td class="cmp d"></td></tr></tbody></table>
+    <tr data-k="battery" data-basic="1"><td>Battery</td><td class="v"></td><td class="cmp o"></td><td class="cmp d"></td></tr></tbody></table>
     <div class="dv-cmpnote cmp">Comparison: the same inputs on ${ot.short} (g ${ot.g}). Paths diverge, so use Resync.</div>
     <div class="dv-btns"><button class="btn ghost small" id="dvResync">${M.other >= 0 ? 'Resync both to start' : 'Back to the start'}</button><button class="tog" id="dvRumble" aria-pressed="false" title="Needs a controller with a vibration motor (Chrome or Edge)"><i class="sw"></i>Vibration</button>${M.other >= 0 && M.V.sides.some(sd => sd.key === 'earth') ? '<button class="tog" id="dvEq" aria-pressed="false" title="Give the Earth rover the mass that reproduces the target wheel load"><i class="sw"></i>Equal wheel load on Earth</button>' : ''}</div></div>`;
   $('dvHudToggle').onclick = () => { const c = $('dvHud').classList.toggle('collapsed'); $('dvHudToggle').setAttribute('aria-expanded', c ? 'false' : 'true'); };

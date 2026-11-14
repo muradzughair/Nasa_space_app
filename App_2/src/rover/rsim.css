@@ -384,14 +384,6 @@
 .rsim .rv-figs b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rsim .rv-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s2); }
 .rsim .btn.on { border-color: var(--accent); color: var(--accent); }
-.rsim .rb { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; border: 1px solid; }
-.rsim .rb-real { background: #12341d; color: #bbf7d0; border-color: #166534; }
-.rsim .rb-custom { background: #3a2c0c; color: #fde68a; border-color: #92400e; }
-.rsim .rb-test { background: #1a2547; color: #bfdbfe; border-color: #3b5aa8; }
-.rsim .rb-generic { background: #232b38; color: #cbd5e1; border-color: #475569; }
-.rsim .assumed, .rsim .verif { display: inline-block; border-radius: 4px; padding: 0 5px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; line-height: 15px; vertical-align: 1px; cursor: help; }
-.rsim .assumed { background: #2f2a12; color: var(--warn); border: 1px solid #6b5a14; }
-.rsim .verif { background: #10261b; color: var(--good); border: 1px solid #1f5a38; }
 .rsim .rv-card { width: min(920px, 94vw); }
 .rsim .rv-card.wide { width: min(1040px, 96vw); }
 .rsim .rv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--s3); margin-top: var(--s3); }
@@ -434,13 +426,8 @@
 @media (max-width: 760px) {
   .rsim .rv-two { grid-template-columns: 1fr; }
 }
-.rsim .rb, .rsim .assumed, .rsim .verif { white-space: nowrap; align-self: flex-start; flex: none; }
 .rsim .site-note { margin: 0 var(--s3); padding: 6px 10px; border: 1px solid #6b5a14; background: #2f2a12; color: var(--warn); border-radius: 6px; font-size: var(--t-xs); }
 .rsim .load-fail { color: var(--warn); font-size: var(--t-xs); }
-.rsim .vp-label small.prov { display: block; margin-top: 4px; padding: 2px 7px; border-radius: 4px; border: 1px solid; font-size: var(--t-xs); font-weight: 500; line-height: 1.35; pointer-events: auto; cursor: help; white-space: normal; }
-.rsim .prov.real { color: #bbf7d0; border-color: #166534; background: rgba(18,52,29,.7); }
-.rsim .prov.part { color: #fde68a; border-color: #854d0e; background: rgba(66,45,8,.7); }
-.rsim .prov.demo { color: #fecaca; border-color: #7f1d1d; background: rgba(58,26,26,.7); }
 /* ---- additions for the Analog Atlas port */
 .rsim { position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--text); font-family: var(--font); font-size: var(--t-base); -webkit-font-smoothing: antialiased; line-height: normal; text-align: left; }
 .rsim .site { inset: 0; }
@@ -450,11 +437,10 @@
 .rsim .vp-stage.single .rhud.left { border-left-color: var(--earth); }
 .rsim .gr-table { table-layout: fixed; width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 .rsim .gr-table td { vertical-align: top; padding: 4px 4px; overflow-wrap: anywhere; border-top: 1px solid var(--line); }
-.rsim .gr-table td:first-child { color: var(--muted); width: 34%; }
-.rsim .gr-table td:last-child { width: 8.5em; text-align: right; }
+.rsim .gr-table td:first-child { color: var(--muted); width: 42%; }
+.rsim .gr-table td:last-child { width: auto; text-align: left; }
 .rsim .gr-table td.n { text-align: left; white-space: normal; }
 .rsim .gr-table td[colspan] { width: auto; text-align: left; }
-.rsim .gr-table .assumed, .rsim .gr-table .verif { white-space: normal; }
 .rsim .gsel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: var(--s2); }
 .rsim .gsel > span { color: var(--muted); font-size: var(--t-sm); }
 .rsim .rs-load { position: absolute; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 60; padding: 16px; }
@@ -467,14 +453,12 @@
 .rsim .site-title { white-space: normal; }
 .rsim .site-title .meta { display: block; margin-left: 0; }
 .rsim .site-top { flex-wrap: wrap; }
-.rsim .prov { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .rsim .site-side { min-width: 0; }
   .rsim .site-top { gap: var(--s2); padding: var(--s2); }
   .rsim .play-row, .rsim .tool-row { flex-wrap: wrap; }
   .rsim .scrub { min-width: 0; flex: 1 1 120px; }
   .rsim .vp-label { max-width: calc(100% - 20px) !important; }
-  .rsim .vp-label small.prov { display: none; }
   .rsim .dc-cards { grid-template-columns: 1fr; }
   .rsim table { table-layout: fixed; width: 100%; }
   .rsim td, .rsim th { overflow-wrap: anywhere; }

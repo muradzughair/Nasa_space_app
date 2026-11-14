@@ -10,7 +10,6 @@ import { useBlobUrl } from "../../verify/db";
 import type { LatLon } from "../../verify/route";
 import type { ModelSnapshot, PremadeVideoNote, SiteRef, VerificationRequest, VideoRef } from "../../verify/types";
 
-const QUALITY: Record<string, string> = { measured: "measured", map: "mapped", literature: "published", proxy: "estimated" };
 
 export const exact = (lat: number, lon: number) => `${formatLat(lat, 5)}, ${formatLon(lon, 5)}`;
 
@@ -96,7 +95,7 @@ export function ModelSummary({ model }: { model: ModelSnapshot }) {
               <ul>
                 {model.evaluation.groups[g.id].parts.map((p) => (
                   <li key={p.label}>
-                    {p.label}: {p.earth} <span className={`atlas-quality is-${p.quality}`}>{QUALITY[p.quality]}</span> {percent(p.score)}
+                    {p.label}: {p.earth} {percent(p.score)}
                   </li>
                 ))}
               </ul>

@@ -1,5 +1,5 @@
 import { versionLabel } from "../analog/custom";
-import { type AtlasData, type Evaluation, type GroupScore, percent, type Profile, type Quality } from "../analog/data";
+import { type AtlasData, type Evaluation, type GroupScore, percent, type Profile } from "../analog/data";
 import { Radar } from "../analog/Radar";
 import { groupsOf } from "../analog/scoring";
 
@@ -11,7 +11,6 @@ const MARS_PRESSURE = 610;
 
 export const where = (profile: Profile) => (profile.body === "moon" ? "the Moon" : "Mars");
 
-const QUALITY: Record<Quality, string> = { measured: "measured", map: "mapped", literature: "published", proxy: "estimated" };
 
 /** "annual precipitation 8 mm; column water vapour 9.6 kg/m²": the Earth values behind one group. */
 const evidence = (score: GroupScore) => score.parts.map((p) => `${p.label.toLowerCase()}: ${p.earth}`).join("; ");
@@ -137,7 +136,6 @@ export function Comparison({ data, profile, evaluation, label, pressure }: Props
                       <span>
                         {p.label}: {p.earth} <span className="atlas-part-target">(target: {p.target})</span>
                       </span>
-                      <span className={`atlas-quality is-${p.quality}`}>{QUALITY[p.quality]}</span>
                       <span className="atlas-part-score">{percent(p.score)}</span>
                     </li>
                   ))}

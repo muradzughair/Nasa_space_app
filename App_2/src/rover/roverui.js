@@ -3,20 +3,17 @@
 // Ported from the old app/js/roverui.js. Changed: the class "card" is "rcard" (the globe's stylesheet owns "card"), and the Escape listener is
 // removed again when the simulator closes (disposeRoverUI).
 import { R, selectRover, setOverride, setCosmetic, resetBuild, loadBuildText, saveBuildText, cfgOf } from './rovers.js';
-import { CUSTOM_KEYS, LABEL, UNIT, tag, effective } from './rovercfg.js';
+import { CUSTOM_KEYS, LABEL, UNIT, effective } from './rovercfg.js';
 import { estimate } from './soilmech.js';
 import { crrFromSoil, analyze } from './sim.js';
 import { ROOT } from './data.js';
 
 const $ = id => document.getElementById(id);
-const BADGE = { real: 'REAL', custom: 'CUSTOM', test: 'TEST ROVER', generic: 'GENERIC' };
 const PLANET = { mars: 'Mars rover', moon: 'Moon rover', test: 'Earth test rover' };
 const FMT = { mass_kg: v => v.toFixed(0), wheel_count: v => v.toFixed(0), wheel_radius_m: v => v.toFixed(3), wheel_width_m: v => v.toFixed(3), top_speed_ms: v => v.toFixed(3), motor_power_w: v => v.toFixed(0), battery_wh: v => v.toFixed(0), base_power_w: v => v.toFixed(0), ground_clearance_m: v => v.toFixed(2), max_slope_deg: v => v.toFixed(0), drive_force_max_N: v => v.toFixed(0), drive_efficiency: v => v.toFixed(2) };
 const STEP = { mass_kg: 5, wheel_radius_m: 0.005, wheel_width_m: 0.005, motor_power_w: 5, battery_wh: 10, top_speed_ms: 0.001 };
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const H = { ctx: () => null };
-const badge = cfg => `<span class="rb rb-${cfg.kind}">${BADGE[cfg.kind]}</span>`;
-const assumedTag = f => { const t = tag(R.reg, f); return t.assumed ? `<span class="assumed" tabindex="0" title="${esc(t.title)}">${t.user ? 'set by you' : t.derived ? 'derived' : 'assumed'}</span>` : `<span class="verif" title="${esc(t.title)}">sourced</span>`; };
 const fmt = (k, v) => FMT[k](v) + (UNIT[k] ? ' ' + UNIT[k] : '');
 
 export function initRoverUI(hooks) {
@@ -38,8 +35,8 @@ export function disposeRoverUI() { document.removeEventListener('keydown', onEsc
 
 // ---------------------------------------------------------------- rover bar (Site View) and the one-line rover chooser (Drive start screen)
 export function roverSummary(cfg) {
-  return `<div class="rv-sum"><div class="rv-name"><b>${esc(cfg.name)}</b> ${badge(cfg)}<small>${esc(cfg.mission)} &middot; ${esc(PLANET[cfg.planet])}</small></div>
-    <div class="rv-figs">${['mass_kg', 'wheel_count', 'wheel_radius_m', 'wheel_width_m', 'top_speed_ms'].map(k => `<span>${esc(LABEL[k])} <b>${fmt(k, k === 'wheel_count' ? cfg.n_wheels : cfg.fig[k].value)}</b> ${assumedTag(cfg.fig[k])}</span>`).join('')}</div></div>`;
+  return `<div class="rv-sum"><div class="rv-name"><b>${esc(cfg.name)}</b><small>${esc(cfg.mission)} &middot; ${esc(PLANET[cfg.planet])}</small></div>
+    <div class="rv-figs">${['mass_kg', 'wheel_count', 'wheel_radius_m', 'wheel_width_m', 'top_speed_ms'].map(k => `<span>${esc(LABEL[k])} <b>${fmt(k, k === 'wheel_count' ? cfg.n_wheels : cfg.fig[k].value)}</b></span>`).join('')}</div></div>`;
 }
 export function refreshRoverUI() {
   const bar = $('roverBar'); if (!bar || !R.cfg) return;
@@ -49,7 +46,6 @@ export function refreshRoverUI() {
     const body = $('rvDrawBody'), a = document.activeElement;
     if (a && a.type === 'range' && body.contains(a)) {            // while a slider is dragged, update the numbers only so the slider keeps focus
       $('rvRead').innerHTML = readout(R.cfg); const sm = body.querySelector('.rv-sum2'); if (sm) sm.innerHTML = roverSummary(R.cfg) + (R.cfg.kind === 'custom' ? `<p class="hint">Changed from the preset: ${R.cfg.changed.map(k => LABEL[k].toLowerCase()).join(', ')}. This is a custom build, not a real mission rover.</p>` : '');
-      body.querySelectorAll('input[data-k]').forEach(i => { const t = i.parentElement.querySelector('.rv-t'); if (t) t.innerHTML = assumedTag(R.cfg.fig[i.dataset.k]); });
     } else paintDrawer(true);
   }
 }
@@ -63,9 +59,9 @@ export function mountRoverLine(el, onChange) {
 // ---------------------------------------------------------------- picker
 export function openPicker(done) {
   const cards = R.reg.order.map(id => {
-    const row = R.reg.rovers[id], c = cfgOf({ id, ov: {}, cos: {} }), n = Object.values(c.fig).filter(f => !f.verified).length;
-    return `<button class="rcard rv-pick${id === R.build.id ? ' active' : ''}" data-id="${id}"><img src="${ROOT}assets/models/previews/${row.inherit || id}.png" alt="" width="160" height="100" loading="lazy"><div class="t"><span>${esc(row.display_name)}</span>${badge(c)}</div>
-      <div class="n">${esc(row.mission)} &middot; ${esc(PLANET[row.planet])}</div><div class="n">${c.mass_kg.toFixed(0)} kg, ${c.n_wheels} wheels, wheel radius ${c.wheel_radius_m} m</div><div class="n"><span class="assumed">${n} of 12 figures assumed</span></div></button>`;
+    const row = R.reg.rovers[id], c = cfgOf({ id, ov: {}, cos: {} });
+    return `<button class="rcard rv-pick${id === R.build.id ? ' active' : ''}" data-id="${id}"><img src="${ROOT}assets/models/previews/${row.inherit || id}.png" alt="" width="160" height="100" loading="lazy"><div class="t"><span>${esc(row.display_name)}</span></div>
+      <div class="n">${esc(row.mission)} &middot; ${esc(PLANET[row.planet])}</div><div class="n">${c.mass_kg.toFixed(0)} kg, ${c.n_wheels} wheels, wheel radius ${c.wheel_radius_m} m</div></button>`;
   }).join('');
   $('rvCards').innerHTML = cards;
   $('rvCards').onclick = e => { const b = e.target.closest('.rv-pick'); if (!b) return; R.picked = true; selectRover(b.dataset.id); $('rvPicker').classList.add('hidden'); done && done(); };
@@ -78,8 +74,8 @@ export function openDrawer() { $('rvDrawer').classList.remove('hidden'); drawerO
 function closeDrawer() { $('rvDrawer').classList.add('hidden'); drawerOpen = false; }
 function slider(cfg, k) {
   const lim = cfg.limits?.[k] || R.reg.rovers[cfg.id].limits[k], f = cfg.fig[k], v = k === 'wheel_count' ? cfg.n_wheels : f.value;
-  if (k === 'wheel_count') return `<div class="rv-row"><label>${LABEL[k]}</label><div class="seg" role="group" aria-label="Wheel count">${[4, 6].map(n => `<button data-wc="${n}" class="${cfg.n_wheels === n ? 'on' : ''}">${n}</button>`).join('')}</div><span class="rv-t">${assumedTag(f)}</span></div>`;
-  return `<div class="rv-row"><label for="rv_${k}">${LABEL[k]}</label><input id="rv_${k}" data-k="${k}" type="range" min="${lim[0]}" max="${lim[1]}" step="${STEP[k]}" value="${v}"><output id="rvo_${k}">${fmt(k, v)}</output><span class="rv-t">${assumedTag(f)}</span></div>`;
+  if (k === 'wheel_count') return `<div class="rv-row"><label>${LABEL[k]}</label><div class="seg" role="group" aria-label="Wheel count">${[4, 6].map(n => `<button data-wc="${n}" class="${cfg.n_wheels === n ? 'on' : ''}">${n}</button>`).join('')}</div><span class="rv-t"></span></div>`;
+  return `<div class="rv-row"><label for="rv_${k}">${LABEL[k]}</label><input id="rv_${k}" data-k="${k}" type="range" min="${lim[0]}" max="${lim[1]}" step="${STEP[k]}" value="${v}"><output id="rvo_${k}">${fmt(k, v)}</output><span class="rv-t"></span></div>`;
 }
 function readout(cfg) {
   const c = H.ctx(); if (!c) return '';
@@ -101,7 +97,7 @@ function paintDrawer(keepScroll) {
     <h3>Rover</h3><div class="rv-presets">${R.reg.order.map(id => `<button class="btn small${id === cfg.id ? ' on' : ''}" data-pre="${id}">${esc(R.reg.rovers[id].display_name)}</button>`).join('')}</div>
     <h3>Build (changes the physics)</h3>${CUSTOM_KEYS.map(k => slider(cfg, k)).join('')}
     <p class="hint">Ranges are limited to realistic values for ${esc(PLANET[cfg.planet].toLowerCase())}s. Motor power sets the drive force and power cap, top speed is the gear (higher gear, less force). Wheel size and width change sinkage.</p>
-    <h3>Fixed figures of the preset</h3><div class="rv-fixed">${['base_power_w', 'ground_clearance_m', 'max_slope_deg', 'drive_force_max_N', 'drive_efficiency'].map(k => `<div><span>${LABEL[k]}</span><b>${fmt(k, cfg.fig[k].value)}</b> ${assumedTag(cfg.fig[k])}</div>`).join('')}</div>
+    <h3>Fixed figures of the preset</h3><div class="rv-fixed">${['base_power_w', 'ground_clearance_m', 'max_slope_deg', 'drive_force_max_N', 'drive_efficiency'].map(k => `<div><span>${LABEL[k]}</span><b>${fmt(k, cfg.fig[k].value)}</b></div>`).join('')}</div>
     <h3>Live readout on each ground</h3><div id="rvRead">${readout(cfg)}</div>
     <h3>Looks only (no effect on the physics)</h3>
     <div class="rv-row"><label for="rv_col">Body colour</label><input id="rv_col" type="color" value="${cfg.cos.color}"><span></span><span class="rv-t"></span></div>
@@ -133,10 +129,10 @@ export function openCompare() {
 }
 function buildEditor(w) {
   const cfg = effective(R.reg, cmp[w]), row = R.reg.rovers[cfg.id];
-  return `<div class="rv-col" data-w="${w}"><h3>Build ${w} ${badge(cfg)}</h3><select aria-label="Rover for build ${w}" data-sel>${R.reg.order.map(id => `<option value="${id}"${id === cfg.id ? ' selected' : ''}>${esc(R.reg.rovers[id].display_name)}</option>`).join('')}</select>
+  return `<div class="rv-col" data-w="${w}"><h3>Build ${w}</h3><select aria-label="Rover for build ${w}" data-sel>${R.reg.order.map(id => `<option value="${id}"${id === cfg.id ? ' selected' : ''}>${esc(R.reg.rovers[id].display_name)}</option>`).join('')}</select>
     ${CUSTOM_KEYS.map(k => { const lim = row.limits[k], v = k === 'wheel_count' ? cfg.n_wheels : cfg.fig[k].value; return k === 'wheel_count'
       ? `<div class="rv-row"><label>${LABEL[k]}</label><div class="seg">${[4, 6].map(n => `<button data-wc="${n}" class="${cfg.n_wheels === n ? 'on' : ''}">${n}</button>`).join('')}</div><span class="rv-t"></span></div>`
-      : `<div class="rv-row"><label>${LABEL[k]}</label><input data-k="${k}" type="range" min="${lim[0]}" max="${lim[1]}" step="${STEP[k]}" value="${v}"><output>${fmt(k, v)}</output><span class="rv-t">${assumedTag(cfg.fig[k])}</span></div>`; }).join('')}</div>`;
+      : `<div class="rv-row"><label>${LABEL[k]}</label><input data-k="${k}" type="range" min="${lim[0]}" max="${lim[1]}" step="${STEP[k]}" value="${v}"><output>${fmt(k, v)}</output><span class="rv-t"></span></div>`; }).join('')}</div>`;
 }
 function ground() { const c = H.ctx(); return c.grounds[cmp.ground]; }
 function evalBuild(b) {

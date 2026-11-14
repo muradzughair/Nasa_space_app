@@ -527,9 +527,9 @@ export function provenance(p) {
   return { cls: im && im.img && !e.synthetic_fine ? 'real' : 'part', short: `${el}. ${img}.${fine}${soil}`, long: [`Centre ${e.site_center[0].toFixed(5)}, ${e.site_center[1].toFixed(5)}. Fetched ${e.date_built.slice(0, 16).replace('T', ' ')} UTC (${(e.bytes / 1e6).toFixed(1)} MB of elevation tiles).`, `Heights relative to: ${e.datum}.`, ...(e.missing || []).map(m => 'Note: ' + m), 'Rocks are illustrative (rule-based, fixed seed): they are not mapped from the image and not in the height data, and the wheels do not feel them.'].join(' ') };
 }
 function fillLabels() {
-  const c = V.ctx, p = V.patch, pr = provenance(p), badge = `<small class="prov ${pr.cls}" title="${esc(pr.long)}">${esc(pr.short)}</small>`;
+  const c = V.ctx, p = V.patch, pr = provenance(p);
   $('siteTitle').innerHTML = `<span class="r">${esc(c.place.name)}</span><span class="meta">${c.place.lat.toFixed(4)}, ${c.place.lon.toFixed(4)} &middot; 2 km patch, 10 km context &middot; target ${esc(c.target.name)}</span>`;
-  const label = s => `${s.key === 'target' ? `At ${esc(c.target.bodyName)} gravity` : 'At Earth gravity'}<small>g ${s.g} m/s&sup2; &middot; same Earth ground${V.sides.length > 1 ? '' : ''}</small>${badge}`;
+  const label = s => `${s.key === 'target' ? `At ${esc(c.target.bodyName)} gravity` : 'At Earth gravity'}<small>g ${s.g} m/s&sup2; &middot; same Earth ground</small>`;
   $('vpLeft').innerHTML = V.sides[0] ? label(V.sides[0]) : '';
   $('vpRight').innerHTML = V.sides[1] ? label(V.sides[1]) : '';
   const notes = ['real ground, north-up; the sun azimuth is a compass bearing', 'the close-up grain is a generic photo texture and the rocks are illustrative', 'beyond the outline is the real 10 km context ring at 62.5 m'];
@@ -537,32 +537,32 @@ function fillLabels() {
   $('synthNote').textContent = notes.join(' · ') + '.';
   $('siteBadges').innerHTML = `<span class="badge ok" title="${esc(pr.long)}">REAL TERRAIN: ${esc(p.prov.elevation_source_id.startsWith('glo90') ? 'GLO-90' : 'GLO-30')}</span><span class="badge" title="A screening model with simplified soil behaviour, not a validated rover simulation">SCREENING MODEL</span>`;
 }
-function row(k, v, how) { return `<tr><td>${esc(k)}</td><td class="n">${esc(v)}</td><td><span class="${how === 'real' || how === 'from the grid' ? 'verif' : 'assumed'}">${esc(how)}</span></td></tr>`; }
+function row(k, v) { return `<tr><td>${esc(k)}</td><td class="n">${esc(v)}</td></tr>`; }
 function fillGround() {
   const e = V.patch.prov, im = V.imagery, st = V.patch.stats, m = x => (x >= 10 ? x.toFixed(0) : x.toFixed(1)) + ' m';
   $('cmpTable').innerHTML = [
-    row('Elevation source', e.elevation_source, 'real'),
-    row('Elevation spacing', `${m(e.spacing_ns_m)} N-S${e.spacing_ew_m ? `, ${m(e.spacing_ew_m)} E-W` : ''}`, 'real'),
-    row('Fine grid', `${upsample(V.patch).M} x ${upsample(V.patch).M} at ${(V.patch.size / (upsample(V.patch).M - 1)).toFixed(2)} m`, 'real'),
-    row('Below about ' + m(2 * e.elevation_resolution_m), e.synthetic_fine ? `interpolation plus fractal detail, rms ${(e.fine_detail_rms_m * 100).toFixed(0)} cm` : 'source', e.synthetic_fine ? 'synthetic' : 'real'),
-    row('Context ring', `${e.ctx.n} x ${e.ctx.n} at 62.5 m, ${Math.round(e.ctx.valid * 100)} % with data`, 'real'),
-    row('Imagery', im && im.img ? `${im.spec.label}, zoom ${im.img.zoom} (${m(im.img.tilePixelM)} pixels)` : 'none', im && im.img ? 'real' : 'none'),
-    row('Median slope, 90th pct', `${st.slope_med.toFixed(1)}°, ${st.slope_p90.toFixed(1)}°`, 'real'),
-    row('Relief in the patch', m(st.relief), 'real'),
-    row('Lowest point', `${e.hmin.toFixed(1)} m (EGM2008)`, 'real'),
-  ].join('') + (im && im.img ? `<tr><td colspan="3" class="hint">${esc(im.spec.attribution)}. Terms: ${esc(im.spec.terms)}</td></tr>` : '') + `<tr><td colspan="3" class="hint">${esc(e.licence[0])}.</td></tr>`;
+    row('Elevation source', e.elevation_source),
+    row('Elevation spacing', `${m(e.spacing_ns_m)} N-S${e.spacing_ew_m ? `, ${m(e.spacing_ew_m)} E-W` : ''}`),
+    row('Fine grid', `${upsample(V.patch).M} x ${upsample(V.patch).M} at ${(V.patch.size / (upsample(V.patch).M - 1)).toFixed(2)} m`),
+    row('Below about ' + m(2 * e.elevation_resolution_m), e.synthetic_fine ? `interpolation plus fractal detail, rms ${(e.fine_detail_rms_m * 100).toFixed(0)} cm` : 'source'),
+    row('Context ring', `${e.ctx.n} x ${e.ctx.n} at 62.5 m, ${Math.round(e.ctx.valid * 100)} % with data`),
+    row('Imagery', im && im.img ? `${im.spec.label}, zoom ${im.img.zoom} (${m(im.img.tilePixelM)} pixels)` : 'none'),
+    row('Median slope, 90th pct', `${st.slope_med.toFixed(1)}°, ${st.slope_p90.toFixed(1)}°`),
+    row('Relief in the patch', m(st.relief)),
+    row('Lowest point', `${e.hmin.toFixed(1)} m (EGM2008)`),
+  ].join('') + (im && im.img ? `<tr><td colspan="2" class="hint">${esc(im.spec.attribution)}. Terms: ${esc(im.spec.terms)}</td></tr>` : '') + `<tr><td colspan="2" class="hint">${esc(e.licence[0])}.</td></tr>`;
 }
 function fillSoil() {
   const s = V.ctx.soil, S = RS.reg.soils[s.cls];
-  $('soilTable').innerHTML = s.rows.map(r => row(r.field, r.value, r.how)).join('') +
-    row('Friction (default)', frictionFromSoil(s.soil).toFixed(2), 'assumed') + row(`Bekker n, kc, kphi (${S.label})`, `${S.n}, ${S.kc}, ${S.kphi}`, 'assumed');
+  $('soilTable').innerHTML = s.rows.map(r => row(r.field, r.value)).join('') +
+    row('Friction (default)', frictionFromSoil(s.soil).toFixed(2)) + row(`Bekker n, kc, kphi (${S.label})`, `${S.n}, ${S.kc}, ${S.kphi}`);
   $('soilNote').textContent = 'Friction and rolling resistance follow the old placeholder formulas of soil competence; the Bekker constants are the old assumed, simplified values per ground class (rovers.json). Nothing here is a measurement of this ground. ' + s.rows.filter(r => r.how !== 'from the grid').map(r => `${r.field}: ${r.basis}`).join(' ');
 }
 
 // ---------------------------------------------------------------- simulation set-up
 function paintSimIntro() {
-  const c = V.ctx, par = RS.cfg, gT = c.target.gravity, eq = par.mass_kg * gT / 9.81, nAss = Object.values(par.fig).filter(f => !f.verified).length, test = par.base_badge === 'test';
-  $('simIntro').innerHTML = `The rover build (<b>${esc(par.name)}</b>, ${par.kind.toUpperCase()}) drives a start-to-goal line across this ground${V.sides.length > 1 ? ` twice: at ${esc(c.target.bodyName)} gravity (${gT} m/s&sup2;) and at Earth gravity (9.81 m/s&sup2;)` : ` at ${V.sides[0] && V.sides[0].key === 'target' ? `${esc(c.target.bodyName)} gravity (${gT}` : 'Earth gravity (9.81'} m/s&sup2;)`}. <span class="assumed" title="Figures marked assumed have no verified source. See the rover panel for each one.">${nAss} figures assumed</span>`;
+  const c = V.ctx, par = RS.cfg, gT = c.target.gravity, eq = par.mass_kg * gT / 9.81, test = par.base_badge === 'test';
+  $('simIntro').innerHTML = `The rover build (<b>${esc(par.name)}</b>, ${par.kind.toUpperCase()}) drives a start-to-goal line across this ground${V.sides.length > 1 ? ` twice: at ${esc(c.target.bodyName)} gravity (${gT} m/s&sup2;) and at Earth gravity (9.81 m/s&sup2;)` : ` at ${V.sides[0] && V.sides[0].key === 'target' ? `${esc(c.target.bodyName)} gravity (${gT}` : 'Earth gravity (9.81'} m/s&sup2;)`}.`;
   const lab = $('eqMassLbl'); if (!lab) return;
   lab.innerHTML = test ? 'Scarecrow already weighs on Earth about what Curiosity weighs on Mars (JPL built it for exactly this reason), so the equal wheel load option is not needed.'
     : `Use equal-wheel-load test mass at Earth gravity (${eq.toFixed(0)} kg = ${par.mass_kg} kg x ${(gT / 9.81).toFixed(2)}). JPL's Scarecrow test rover is the real-world version of this idea.`;

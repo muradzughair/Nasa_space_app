@@ -4,7 +4,6 @@ import {
   buildCustomTarget,
   customProfile,
   type CustomTarget,
-  HOW_LABEL,
   type ProvenanceRow,
   removeCustomTarget,
   renameCustomTarget,
@@ -16,7 +15,7 @@ import { formatLat, formatLon } from "../geo/coords";
 import { switchPlanet } from "../state/navigation";
 import { type Selection, showToast, store, updateAtlas, updateHeatmap } from "../state/store";
 
-/** Where each field of a custom target comes from: measured, mapped, computed or inherited, one row per field. */
+/** The fields of a custom target: name, value and source, one row per field. */
 export function ProvenanceList({ rows }: { rows: ProvenanceRow[] }) {
   return (
     <ul className="provenance">
@@ -24,7 +23,6 @@ export function ProvenanceList({ rows }: { rows: ProvenanceRow[] }) {
         <li key={row.field}>
           <div className="provenance-head">
             <span className="provenance-field">{row.field}</span>
-            <span className={`provenance-how is-${row.how}`}>{HOW_LABEL[row.how]}</span>
           </div>
           <div className="provenance-value">{row.value}</div>
           <div className="provenance-source">{row.source}</div>
@@ -33,12 +31,6 @@ export function ProvenanceList({ rows }: { rows: ProvenanceRow[] }) {
     </ul>
   );
 }
-
-/** One line: how many fields are per-point and how many are inherited. */
-export const provenanceCount = (rows: ProvenanceRow[]) => {
-  const inherited = rows.filter((r) => r.how === "inherited").length;
-  return `${rows.length - inherited} of ${rows.length} fields are specific to this point; ${inherited} are inherited from a fixed profile.`;
-};
 
 /** Makes a custom target the chosen lunar version. */
 export function chooseTarget(id: string): void {
@@ -62,7 +54,6 @@ export function TargetDetails({ target, open = false }: { target: CustomTarget; 
       <summary>
         Custom target: {formatLat(target.lat)}, {formatLon(target.lon)}
       </summary>
-      <p className="provenance-count">{provenanceCount(target.provenance)}</p>
       <ProvenanceList rows={target.provenance} />
     </details>
   );
@@ -132,7 +123,6 @@ export function MoonTargetAction({ selection }: { selection: Selection }) {
           <dd>{target.createdAt.slice(0, 10)}</dd>
         </div>
       </dl>
-      <p className="provenance-count">{provenanceCount(target.provenance)}</p>
       <ProvenanceList rows={target.provenance} />
       <button
         type="button"
