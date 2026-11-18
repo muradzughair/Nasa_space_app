@@ -58,6 +58,8 @@ function preloadGlobeChunk(): Plugin {
 }
 
 export default defineConfig({
+  // "/" for npm run dev; the GitHub Pages build sets VITE_BASE=/Nasa_space_app/ (.github/workflows/pages.yml).
+  base: process.env.VITE_BASE || "/",
   plugins: [react(), cesiumStaticAssets(), preloadGlobeChunk()],
   build: {
     target: "es2022",
